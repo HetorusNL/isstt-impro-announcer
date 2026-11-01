@@ -49,7 +49,9 @@ STM32 EEPROM emulation uses flash. Layout: byte 0 magic `0xA1`, bytes 1-8 rest a
 (`0xFF` = none). The buffered API (`eeprom_buffer_fill`/`eeprom_buffer_flush`) is used and a flush happens
 only when a value actually changes, so the host's `REST` for every actuator on each connect is normally
 free. After each flush the bytes are read back; on mismatch the reply is `ERR flash` and the RAM value is
-kept for this session.
+kept for this session. The readback invalidates the D-cache for the flash region first, because the
+core enables the D-cache and the flash HAL does no cache maintenance. After `ERR flash` a repeated
+`REST` with the same value rewrites and re-verifies.
 
 A flash sector erase is slow (up to a few seconds on the F7) and **stalls the whole CPU**: the first
 received RX byte is buffered, further bytes are lost, and servo pulses and SysTick stall too. Therefore:
@@ -62,9 +64,10 @@ LSI tolerance: the IWDG runs from the LSI RC oscillator, so the nominal 500 ms t
 ### NUCLEO-F746ZG limitation (spare board)
 
 The core's variant sets `FLASH_DATA_SECTOR 11`, which does not exist on the F746 (8 sectors). To avoid
-corrupting flash, the `nucleo_f746zg` env (`-DREST_RAM_ONLY`) keeps rests in RAM only and never touches
-flash. Rests are lost at power-off, so release-on-boot only works after the host has sent `REST`
-(until then no channel is attached or driven, and `ANGLE` returns `ERR no rest`).
+corrupting flash, the `nucleo_f746zg` env (`-DREST_RAM_ONLY`) never touches flash. Rests are kept in
+RAM in a `.noinit` section with a magic word, so they survive an IWDG or soft reset (release-on-boot
+then works) but not a power cycle. On power-on nothing is attached or driven until the host sends
+`REST`, and `ANGLE` returns `ERR no rest` until then.
 
 ## Pin table (one table in `src/main.cpp`, `PINS[]`)
 

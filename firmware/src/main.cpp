@@ -28,7 +28,6 @@ static const uint32_t DEFAULT_WATCHDOG_MS = 2000;
 static const uint32_t MAX_WATCHDOG_MS = 10000;
 static const uint32_t MAX_MAXHOLD_MS = 120000;
 
-// EEPROM layout: [0] magic/version, [1..8] rest angle per channel (0xFF=none)
 static const uint8_t EE_MAGIC = 0xA1;
 static const uint8_t REST_NONE = 0xFF;
 
@@ -49,14 +48,33 @@ static char lineBuf[MAX_LINE + 1];
 static size_t lineLen;
 static bool discarding;
 
-// ---- EEPROM ---------------------------------------------------------------
-static void loadRest() {
+// ---- rest storage ---------------------------------------------------------
 #ifdef REST_RAM_ONLY
-  // NUCLEO-F746ZG: the core's flash data sector (11) does not exist on this
-  // chip, so rests are RAM only and never touch flash.
-  for (uint8_t i = 0; i < NUM_CH; i++) restDeg[i] = REST_NONE;
-  return;
-#endif
+// NUCLEO-F746ZG: the core's flash data sector (11) does not exist on this
+// chip, so rests live in RAM only and never touch flash. They are kept in
+// .noinit (not zeroed by startup), guarded by a magic word, so they survive an
+// IWDG/soft reset but not a power cycle.
+static const uint32_t RAM_MAGIC = 0x5245535Au;  // "REST"
+static uint32_t ramMagic __attribute__((section(".noinit")));
+static uint8_t ramRest[NUM_CH] __attribute__((section(".noinit")));
+
+static void loadRest() {
+  if (ramMagic != RAM_MAGIC) {
+    ramMagic = RAM_MAGIC;
+    for (uint8_t i = 0; i < NUM_CH; i++) ramRest[i] = REST_NONE;
+  }
+  for (uint8_t i = 0; i < NUM_CH; i++)
+    restDeg[i] = (ramRest[i] <= 180) ? ramRest[i] : REST_NONE;
+}
+
+static bool storeRest(uint8_t ch, uint8_t deg) {
+  ramRest[ch] = deg;
+  restDeg[ch] = deg;
+  return true;
+}
+#else
+// EEPROM layout: [0] magic/version, [1..8] rest angle per channel (0xFF=none)
+static void loadRest() {
   eeprom_buffer_fill();
   bool valid = eeprom_buffered_read_byte(0) == EE_MAGIC;
   for (uint8_t i = 0; i < NUM_CH; i++) {
@@ -68,10 +86,6 @@ static void loadRest() {
 // Writes only if the stored value differs: flash sector erase is slow.
 // Returns false if the flash readback does not match (RAM value is kept).
 static bool storeRest(uint8_t ch, uint8_t deg) {
-#ifdef REST_RAM_ONLY
-  restDeg[ch] = deg;
-  return true;
-#endif
   bool dirty = false;
   if (eeprom_buffered_read_byte(0) != EE_MAGIC) {
     eeprom_buffered_write_byte(0, EE_MAGIC);
@@ -92,16 +106,22 @@ static bool storeRest(uint8_t ch, uint8_t deg) {
   // Verify: re-read flash and compare with what we meant to store.
   uint8_t want[1 + NUM_CH];
   for (uint8_t i = 0; i < 1 + NUM_CH; i++) want[i] = eeprom_buffered_read_byte(i);
-  eeprom_buffer_fill();
+#if defined(__DCACHE_PRESENT) && __DCACHE_PRESENT
+  // The core enables the D-cache and the flash HAL does no cache maintenance:
+  // drop stale lines so the readback sees real flash. Address and size are
+  // 32-byte aligned (FLASH_BASE_ADDRESS is a sector start).
+  SCB_InvalidateDCache_by_Addr((uint32_t*)FLASH_BASE_ADDRESS,
+                               (int32_t)((E2END + 1 + 31) & ~31u));
+#endif
+  eeprom_buffer_fill();  // buffer now holds the real flash contents
   for (uint8_t i = 0; i < 1 + NUM_CH; i++) {
-    if (eeprom_buffered_read_byte(i) != want[i]) {
-      // Flash differs; restore the buffer to our intended contents.
-      for (uint8_t j = 0; j < 1 + NUM_CH; j++) eeprom_buffered_write_byte(j, want[j]);
-      return false;
-    }
+    // On mismatch the buffer keeps the flash contents, so the next REST with
+    // the same value is dirty again and rewrites/re-verifies.
+    if (eeprom_buffered_read_byte(i) != want[i]) return false;
   }
   return true;
 }
+#endif
 
 // ---- servo helpers --------------------------------------------------------
 static void moveTo(uint8_t ch, uint8_t deg) {
