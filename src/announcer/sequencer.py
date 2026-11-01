@@ -69,9 +69,15 @@ async def run_session(
     halls: Sequence[str],
     audio: Sequence[Path],
 ) -> None:
+    selected: list[str] = []  # halls whose step-1 tap completed
     try:
         for hall in halls:  # 1. zones on (toggle)
-            await ctrl.tap(hall)
+            try:
+                await ctrl.tap(hall)
+            except Exception:
+                log.warning("tap of %s failed: its zone state is unknown, not deselecting it", hall)
+                raise
+            selected.append(hall)
         await ctrl.hold(SPREKEN)  # 2.
         await clock.sleep(cfg.announce.chime_seconds)  # 3.
         for path in audio:  # 4.
@@ -83,7 +89,7 @@ async def run_session(
     except Exception:
         if await _release_after_error(ctrl) and cfg.announce.deselect_zones_after:
             try:
-                await _deselect(ctrl, halls, best_effort=True)
+                await _deselect(ctrl, selected, best_effort=True)
             except asyncio.CancelledError:
                 pass  # cancelled while deselecting; the original error still wins
         raise  # the original error
@@ -92,7 +98,7 @@ async def run_session(
         raise
     await release_spreken(ctrl)
     if cfg.announce.deselect_zones_after:  # 6. also after the release_all fallback
-        await _deselect(ctrl, halls)
+        await _deselect(ctrl, selected)
 
 
 async def _release_after_error(ctrl: Controller) -> bool:

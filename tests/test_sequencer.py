@@ -160,6 +160,19 @@ async def test_deselect_tap_failure_on_error_path_keeps_original_error(tmp_path)
     assert ctrl.events[-1][1:] == ("release", "SPREKEN")
 
 
+async def test_deselect_only_halls_that_were_selected(tmp_path, caplog):
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, player = setup(cfg)
+    ctrl.fail_on = {"tap:SC2"}
+    with caplog.at_level(logging.WARNING, logger="announcer.sequencer"):
+        with pytest.raises(ControllerError):
+            await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.5)])
+    kinds = [(k, b) for _, k, b in ctrl.events]
+    # SPREKEN never held; release is harmless; SC2's state is unknown so it is not re-tapped
+    assert kinds == [("tap", "SC1"), ("release", "SPREKEN"), ("tap", "SC1")]
+    assert any(r.levelno == logging.WARNING and "SC2" in r.getMessage() for r in caplog.records)
+
+
 async def test_no_deselect_on_cancel(tmp_path):
     cfg = make_cfg(deselect_zones_after=True)
     clock, ctrl, player = setup(cfg)

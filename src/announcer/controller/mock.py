@@ -21,9 +21,10 @@ class MockController:
         self.fail_on: set[str] = set()
         self.release_delay_s = 0.0  # test hook: make release take (clock) time
 
-    def _check(self, kind: str) -> None:
-        if kind in self.fail_on:
-            raise ControllerError(f"mock failure on {kind}")
+    def _check(self, kind: str, button: str = "") -> None:
+        # fail_on entries: an action kind ("tap") or a kind for one button ("tap:SC2")
+        if kind in self.fail_on or f"{kind}:{button}" in self.fail_on:
+            raise ControllerError(f"mock failure on {kind} {button}".rstrip())
 
     def _record(self, kind: str, button: str) -> None:
         self.events.append((self._clock.now(), kind, button))
@@ -46,19 +47,19 @@ class MockController:
         self.actuators = dict(actuators)
 
     async def tap(self, button: str) -> None:
-        self._check("tap")
+        self._check("tap", button)
         self._record("tap", button)
         press_ms, release_ms = self._ms(button)
         await self._clock.sleep(press_ms / 1000)
         await self._clock.sleep(release_ms / 1000)
 
     async def hold(self, button: str) -> None:
-        self._check("hold")
+        self._check("hold", button)
         self._record("hold", button)
         await self._clock.sleep(self._ms(button)[0] / 1000)
 
     async def release(self, button: str) -> None:
-        self._check("release")
+        self._check("release", button)
         if self.release_delay_s:
             await self._clock.sleep(self.release_delay_s)
         self._record("release", button)
@@ -68,5 +69,5 @@ class MockController:
         self._record("release_all", "")
 
     async def set_angle(self, button: str, angle: int) -> None:
-        self._check("set_angle")
+        self._check("set_angle", button)
         self._record("set_angle", button)
