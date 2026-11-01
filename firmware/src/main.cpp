@@ -28,7 +28,11 @@ static const uint32_t DEFAULT_WATCHDOG_MS = 2000;
 static const uint32_t MAX_WATCHDOG_MS = 10000;
 static const uint32_t MAX_MAXHOLD_MS = 120000;
 
-static const uint8_t EE_MAGIC = 0xA1;
+// Bump PIN_TABLE_VERSION whenever PINS[] changes meaning; it is folded (with
+// NUM_CH) into the stored magic so old rests are never carried over.
+static const uint8_t PIN_TABLE_VERSION = 1;
+static const uint16_t LAYOUT_VERSION = (uint16_t)((NUM_CH << 8) | PIN_TABLE_VERSION);
+static const uint8_t EE_MAGIC = (uint8_t)(0xA1 ^ NUM_CH ^ (PIN_TABLE_VERSION * 17));
 static const uint8_t REST_NONE = 0xFF;
 
 // ---- state ----------------------------------------------------------------
@@ -54,21 +58,35 @@ static bool discarding;
 // chip, so rests live in RAM only and never touch flash. They are kept in
 // .noinit (not zeroed by startup), guarded by a magic word, so they survive an
 // IWDG/soft reset but not a power cycle.
-static const uint32_t RAM_MAGIC = 0x5245535Au;  // "REST"
+// Each rest is also stored complemented; any mismatch invalidates all rests.
+static const uint32_t RAM_MAGIC = 0x52455300u ^ LAYOUT_VERSION;  // "RES" + layout
 static uint32_t ramMagic __attribute__((section(".noinit")));
 static uint8_t ramRest[NUM_CH] __attribute__((section(".noinit")));
+static uint8_t ramRestInv[NUM_CH] __attribute__((section(".noinit")));
+
+static bool ramValid() {
+  if (ramMagic != RAM_MAGIC) return false;
+  for (uint8_t i = 0; i < NUM_CH; i++) {
+    if ((uint8_t)~ramRest[i] != ramRestInv[i]) return false;
+    if (ramRest[i] > 180 && ramRest[i] != REST_NONE) return false;
+  }
+  return true;
+}
 
 static void loadRest() {
-  if (ramMagic != RAM_MAGIC) {
+  if (!ramValid()) {
     ramMagic = RAM_MAGIC;
-    for (uint8_t i = 0; i < NUM_CH; i++) ramRest[i] = REST_NONE;
+    for (uint8_t i = 0; i < NUM_CH; i++) {
+      ramRest[i] = REST_NONE;
+      ramRestInv[i] = (uint8_t)~REST_NONE;
+    }
   }
-  for (uint8_t i = 0; i < NUM_CH; i++)
-    restDeg[i] = (ramRest[i] <= 180) ? ramRest[i] : REST_NONE;
+  for (uint8_t i = 0; i < NUM_CH; i++) restDeg[i] = ramRest[i];
 }
 
 static bool storeRest(uint8_t ch, uint8_t deg) {
   ramRest[ch] = deg;
+  ramRestInv[ch] = (uint8_t)~deg;
   restDeg[ch] = deg;
   return true;
 }
@@ -85,8 +103,10 @@ static void loadRest() {
 
 // Writes only if the stored value differs: flash sector erase is slow.
 // Returns false if the flash readback does not match (RAM value is kept).
+static bool flashDirty;  // last readback mismatched: force a rewrite
+
 static bool storeRest(uint8_t ch, uint8_t deg) {
-  bool dirty = false;
+  bool dirty = flashDirty;
   if (eeprom_buffered_read_byte(0) != EE_MAGIC) {
     eeprom_buffered_write_byte(0, EE_MAGIC);
     for (uint8_t i = 0; i < NUM_CH; i++) eeprom_buffered_write_byte(1 + i, REST_NONE);
@@ -115,10 +135,16 @@ static bool storeRest(uint8_t ch, uint8_t deg) {
 #endif
   eeprom_buffer_fill();  // buffer now holds the real flash contents
   for (uint8_t i = 0; i < 1 + NUM_CH; i++) {
-    // On mismatch the buffer keeps the flash contents, so the next REST with
-    // the same value is dirty again and rewrites/re-verifies.
-    if (eeprom_buffered_read_byte(i) != want[i]) return false;
+    if (eeprom_buffered_read_byte(i) != want[i]) {
+      // Rebuild the whole buffer from RAM so the next REST rewrites every
+      // channel (a bad magic byte would otherwise wipe the other rests).
+      eeprom_buffered_write_byte(0, EE_MAGIC);
+      for (uint8_t k = 0; k < NUM_CH; k++) eeprom_buffered_write_byte(1 + k, restDeg[k]);
+      flashDirty = true;
+      return false;
+    }
   }
+  flashDirty = false;
   return true;
 }
 #endif

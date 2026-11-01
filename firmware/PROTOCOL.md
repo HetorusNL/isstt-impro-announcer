@@ -65,9 +65,14 @@ LSI tolerance: the IWDG runs from the LSI RC oscillator, so the nominal 500 ms t
 
 The core's variant sets `FLASH_DATA_SECTOR 11`, which does not exist on the F746 (8 sectors). To avoid
 corrupting flash, the `nucleo_f746zg` env (`-DREST_RAM_ONLY`) never touches flash. Rests are kept in
-RAM in a `.noinit` section with a magic word, so they survive an IWDG or soft reset (release-on-boot
-then works) but not a power cycle. On power-on nothing is attached or driven until the host sends
-`REST`, and `ANGLE` returns `ERR no rest` until then.
+RAM in a `.noinit` section, protected by a magic word (which includes a layout version: channel count
+and pin table version) and a complemented copy of each rest; any mismatch discards all rests. They
+survive an IWDG or soft reset, the NRST button and an ST-Link reset (release-on-boot then works), but
+are not guaranteed to survive a power cycle. After power-on, assume nothing is driven until the host
+sends `REST`, and `ANGLE` returns `ERR no rest` until then.
+
+The F767 EEPROM magic byte also includes the layout version, so a reflash with a different pin table
+ignores old rests. If a flash readback mismatches, the next `REST` rewrites all channels from RAM.
 
 ## Pin table (one table in `src/main.cpp`, `PINS[]`)
 
