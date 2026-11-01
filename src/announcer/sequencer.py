@@ -31,9 +31,9 @@ async def _uninterruptible(aw: Awaitable[T]) -> T:
         try:
             await asyncio.shield(task)
         except asyncio.CancelledError:
+            cancelled = True  # before the done() check: the cancel may land with completion
             if task.done():
                 break
-            cancelled = True
     if cancelled:
         raise asyncio.CancelledError
     return task.result()
@@ -77,18 +77,45 @@ async def run_session(
         for path in audio:  # 4.
             await player.play(path)
         await clock.sleep(cfg.announce.tail_seconds)  # 5.
-    except BaseException:
-        try:
-            await release_spreken(ctrl)
-        except Exception:
-            log.exception("release after a failed session also failed")
-        except asyncio.CancelledError:
-            pass  # cancelled again; the release itself still ran to completion
+    except asyncio.CancelledError:
+        await _release_after_error(ctrl)
+        raise  # 6. skipped when cancelled
+    except Exception:
+        if await _release_after_error(ctrl) and cfg.announce.deselect_zones_after:
+            try:
+                await _deselect(ctrl, halls, best_effort=True)
+            except asyncio.CancelledError:
+                pass  # cancelled while deselecting; the original error still wins
         raise  # the original error
-    released = await release_spreken(ctrl)
-    if released and cfg.announce.deselect_zones_after:  # 6.
-        for hall in halls:
+    except BaseException:
+        await _release_after_error(ctrl)
+        raise
+    await release_spreken(ctrl)
+    if cfg.announce.deselect_zones_after:  # 6. also after the release_all fallback
+        await _deselect(ctrl, halls)
+
+
+async def _release_after_error(ctrl: Controller) -> bool:
+    """Release while another error propagates; True if it succeeded (incl. fallback)."""
+    try:
+        await release_spreken(ctrl)
+        return True
+    except Exception:
+        log.exception("release after a failed session also failed")
+    except asyncio.CancelledError:
+        pass  # cancelled again; the release itself still ran to completion
+    return False
+
+
+async def _deselect(ctrl: Controller, halls: Sequence[str], best_effort: bool = False) -> None:
+    """Toggle the zones off again, so the next session's step 1 turns them on."""
+    for hall in halls:
+        try:
             await ctrl.tap(hall)
+        except Exception:
+            if not best_effort:
+                raise
+            log.exception("deselecting %s failed", hall)
 
 
 @asynccontextmanager

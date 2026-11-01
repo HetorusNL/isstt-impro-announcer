@@ -14,7 +14,7 @@ from announcer.config import Actuator, Config
 from announcer.controller.base import ControllerError
 from announcer.controller.mock import MockController
 from announcer.planner import lead_seconds
-from announcer.sequencer import run_session, talk_session
+from announcer.sequencer import _uninterruptible, run_session, talk_session
 
 START = datetime(2026, 12, 18, 9, 0, tzinfo=ZoneInfo("Europe/Amsterdam"))
 SPEED = 200.0
@@ -103,7 +103,7 @@ async def test_deselect_after_when_enabled(tmp_path):
 
 
 async def test_session_releases_on_player_error(tmp_path):
-    cfg = make_cfg(deselect_zones_after=True)
+    cfg = make_cfg()
     clock, ctrl, player = setup(cfg, fail=True)
     with pytest.raises(RuntimeError):
         await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.5)])
@@ -125,9 +125,72 @@ async def test_release_failure_falls_back_to_release_all(tmp_path):
     ctrl.fail_on = {"release"}
     await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.5)])
     kinds = [(k, b) for _, k, b in ctrl.events]
-    # release_all recorded, and no deselect taps after an unsuccessful SPREKEN release
-    assert kinds[-1] == ("release_all", "")
-    assert kinds.count(("tap", "SC1")) == 1
+    # release_all recorded, then the zones are still deselected (they are toggles)
+    assert kinds == [
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+        ("hold", "SPREKEN"),
+        ("release_all", ""),
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+    ]
+
+
+async def test_deselect_after_player_error_still_raises(tmp_path):
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, player = setup(cfg, fail=True)
+    with pytest.raises(RuntimeError):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.5)])
+    kinds = [(k, b) for _, k, b in ctrl.events]
+    assert kinds[2:] == [("hold", "SPREKEN"), ("release", "SPREKEN"), ("tap", "SC1"), ("tap", "SC2")]
+
+
+async def test_deselect_tap_failure_on_error_path_keeps_original_error(tmp_path):
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, player = setup(cfg, fail=True)
+
+    async def flaky_tap(button, _orig=ctrl.tap):
+        if any(k == "release" for _, k, _ in ctrl.events):
+            raise ControllerError("tap broke")
+        await _orig(button)
+
+    ctrl.tap = flaky_tap
+    with pytest.raises(RuntimeError):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.5)])
+    assert ctrl.events[-1][1:] == ("release", "SPREKEN")
+
+
+async def test_no_deselect_on_cancel(tmp_path):
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, player = setup(cfg)
+    task = asyncio.create_task(
+        run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 2.0)])
+    )
+    while not any(k == "hold" for _, k, _ in ctrl.events):
+        await asyncio.sleep(0.001)
+    await asyncio.sleep(1.0 / SPEED)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert ctrl.events[-1][1:] == ("release", "SPREKEN")
+    assert sum(1 for _, k, _ in ctrl.events if k == "tap") == 2
+
+
+async def test_uninterruptible_keeps_cancel_that_lands_with_completion():
+    outer: asyncio.Task | None = None
+
+    async def inner() -> str:
+        await asyncio.sleep(0)
+        outer.cancel()  # cancel arrives in the same loop step the inner finishes
+        return "done"
+
+    async def body() -> str:
+        return await _uninterruptible(inner())
+
+    outer = asyncio.create_task(body())
+    with pytest.raises(asyncio.CancelledError):
+        await outer
+    assert outer.cancelled()
 
 
 async def test_release_and_release_all_failure_raises(tmp_path):
