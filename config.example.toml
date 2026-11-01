@@ -1,0 +1,62 @@
+[controller]
+port = "/dev/ttyACM0"
+keepalive_ms = 500
+watchdog_ms = 2000
+max_hold_s = 60
+
+[actuators.SC1]
+channel = 0
+rest = 90
+press = 60
+
+[actuators.SC2]
+channel = 1
+rest = 90
+press = 60
+
+[actuators.SC3]
+channel = 2
+rest = 90
+press = 60
+
+[actuators.SPREKEN]
+channel = 3
+rest = 90
+press = 60
+
+[announce]
+halls = ["SC1", "SC2", "SC3"]
+chime_seconds = 3.0
+tail_seconds = 0.5
+deselect_zones_after = false
+late_threshold_seconds = 60
+merge_window_seconds = 30
+
+# Placeholders allowed: {time} {count} {fields} {halls}
+[messages]
+match_start = "Referees, you may start the matches."
+match_end = "Referees, you may end the matches."
+
+[tts]
+voice_model = "voices/en_US-lessac-medium.onnx"
+length_scale = 1.0
+cache_dir = "cache/tts"
+
+[audio]
+volume = 1.0
+
+[schedule]
+kind = "cupkit"
+matches_urls = ["https://cupkit.nl/messedup/isstt-36/senior/matches"]
+file = "schedule.json"
+poll_seconds = 60
+store = "state/schedule.json"
+default_match_minutes = 20
+timezone = "Europe/Amsterdam"
+
+[schedule.round_minutes]
+"Round 1" = 15
+"Round 2" = 15
+"Round 3" = 20
+"Round 4" = 20
+"Round 5" = 20

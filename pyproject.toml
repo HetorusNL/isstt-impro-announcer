@@ -1,0 +1,37 @@
+[project]
+name = "announcer"
+version = "0.1.0"
+description = "ISSTT IMPRO announcer"
+readme = "README.md"
+authors = [
+    { name = "HetorusNL", email = "tim@hetorus.nl" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "nicegui>=3.18.0",
+    "piper-tts>=1.8.0",
+    "pyserial>=3.5",
+    "selectolax>=1.0.2",
+    "sounddevice>=0.5.6",
+    "soundfile>=0.14.0",
+    "tomli-w>=1.2.0",
+]
+
+[project.scripts]
+announcer = "announcer.main:main"
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
