@@ -19,8 +19,8 @@
 - Buttons are referred to by name (`SC1`, `SPREKEN`, …) everywhere in host code. Channel numbers appear only in config.
 - Default messages, verbatim: `Referees, you may start the matches.` and `Referees, you may end the matches.`
 - Default halls `["SC1", "SC2", "SC3"]`. Every announcement goes to the configured halls, never per field.
-- Timezone `Europe/Amsterdam`. Default match length 20 min. Late threshold 60 s. Schedule poll 60 s.
-- Secrets (Cupkit cookie) only in env var `CUPKIT_COOKIE` or the untracked `secrets.toml`. Never in `config.toml` or git.
+- Timezone `Europe/Amsterdam`. Match length per round from config: `Round 1` and `Round 2` = 15 min, `Round 3`–`Round 5` = 20 min; unknown rounds use `default_match_minutes = 20`. Late threshold 60 s. Schedule poll 60 s.
+- The schedule comes from the **public** Cupkit matches page `https://cupkit.nl/messedup/isstt-36/senior/matches`, so no login or secrets are needed. Never commit organiser/admin pages or credentials; a future API token goes in an env var or the untracked `secrets.toml`, never in `config.toml` or git.
 - Platform: Tim's Arch Linux laptop only.
 - Commits are GPG-signed. If a commit fails because the key is locked, ask Tim to unlock it (`echo | gpg --clearsign >/dev/null`). Never use `--no-gpg-sign`.
 - Every commit message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
@@ -30,8 +30,8 @@
 1. **The schedule changes while an announcement is due or in progress.** Replanning must not replay an announcement already played or skipped, and must not drop the session currently running. Test: `test_replan_does_not_replay_played` (Task 6).
 2. **Restart mid-tournament.** On start-up, announcements already more than 60 s late are marked missed instead of all firing at once. Test: `test_startup_marks_past_as_missed` (Task 6).
 3. **Audio device missing or Piper failing mid-session.** Spreken is still released, the failure appears in history, and the engine keeps running. Test: `test_session_releases_on_player_error` (Task 5).
-4. **Cupkit returns a login page or garbage instead of the timetable** (expired cookie). This counts as a source failure: the last good schedule stays in use and the GUI warns. It must not wipe the schedule to zero matches. Test: `test_login_page_is_source_error` (Task 3).
-5. **Placeholder teams and a missing round length.** Matches still schedule, and the end time falls back to `default_match_minutes`. Test: `test_unknown_round_uses_default_minutes` (Task 4).
+4. **Cupkit returns an error, maintenance or otherwise empty page instead of the timetable.** This counts as a source failure: the last good schedule stays in use and the GUI warns. It must not wipe the schedule to zero matches. Test: `test_page_without_matches_is_source_error` (Task 3).
+5. **Placeholder teams and a round missing from `round_minutes`** (e.g. the committee adds a Round 6). Matches still schedule, and the end time falls back to `default_match_minutes`. Test: `test_unknown_round_uses_default_minutes` (Task 4).
 
 ---
 
@@ -48,7 +48,7 @@ src/announcer/
   planner.py                   matches -> announcements -> sessions, lead time
   schedule/
     source.py                  ScheduleSource protocol, SourceError
-    cupkit.py                  parse_results_html, parse_rounds_html, CupkitSource
+    cupkit.py                  parse_matches_html, CupkitSource (public page)
     filesource.py              FileSource (JSON)
     store.py                   save/load last good schedule
   controller/
@@ -107,11 +107,10 @@ git add hardware/BOM.md && git commit -m "docs: bill of materials"
   - `model.Announcement` (frozen): `due: datetime`, `kind: Kind`, `matches: tuple[Match, ...] = ()`, `text: str | None = None`, property `key -> tuple[str, str]` = `(kind, due.isoformat())`
   - `model.Session` (frozen): `start_at: datetime`, `announcements: tuple[Announcement, ...]`, `halls: tuple[str, ...]`
   - `config.Actuator`: `channel: int`, `rest: int`, `press: int`, `press_ms: int = 250`, `release_ms: int = 250`
-  - `config.Config` with sections `controller` (`port: str = "/dev/ttyACM0"`, `keepalive_ms = 500`, `watchdog_ms = 2000`, `max_hold_s = 60`), `actuators: dict[str, Actuator]`, `announce` (`halls = ["SC1","SC2","SC3"]`, `chime_seconds = 3.0`, `tail_seconds = 0.5`, `deselect_zones_after = False`, `lead_seconds: float | None = None`, `late_threshold_seconds = 60`, `merge_window_seconds = 30`), `messages: dict[str, str]` (keys `match_start`, `match_end`), `tts` (`voice_model = "voices/en_US-lessac-medium.onnx"`, `length_scale = 1.0`, `cache_dir = "cache/tts"`), `audio` (`device: str | None = None`, `volume = 1.0`), `schedule` (`kind: Literal["cupkit","file"] = "cupkit"`, `results_urls: list[str]`, `rounds_urls: list[str]`, `file = "schedule.json"`, `poll_seconds = 60`, `store = "state/schedule.json"`, `default_match_minutes = 20`, `timezone = "Europe/Amsterdam"`)
+  - `config.Config` with sections `controller` (`port: str = "/dev/ttyACM0"`, `keepalive_ms = 500`, `watchdog_ms = 2000`, `max_hold_s = 60`), `actuators: dict[str, Actuator]`, `announce` (`halls = ["SC1","SC2","SC3"]`, `chime_seconds = 3.0`, `tail_seconds = 0.5`, `deselect_zones_after = False`, `lead_seconds: float | None = None`, `late_threshold_seconds = 60`, `merge_window_seconds = 30`), `messages: dict[str, str]` (keys `match_start`, `match_end`), `tts` (`voice_model = "voices/en_US-lessac-medium.onnx"`, `length_scale = 1.0`, `cache_dir = "cache/tts"`), `audio` (`device: str | None = None`, `volume = 1.0`), `schedule` (`kind: Literal["cupkit","file"] = "cupkit"`, `matches_urls: list[str]`, `round_minutes: dict[str, int] = {"Round 1": 15, "Round 2": 15, "Round 3": 20, "Round 4": 20, "Round 5": 20}`, `file = "schedule.json"`, `poll_seconds = 60`, `store = "state/schedule.json"`, `default_match_minutes = 20`, `timezone = "Europe/Amsterdam"`)
   - `config.load(path: Path) -> Config`, `config.save(cfg: Config, path: Path) -> None`, `config.ConfigError(Exception)`
-  - `config.load_cookie(secrets_path: Path) -> str | None`: env `CUPKIT_COOKIE` first, then `secrets.toml` key `cupkit_cookie`
 
-`config.example.toml` defines actuators `SC1` (ch 0), `SC2` (ch 1), `SC3` (ch 2) and `SPREKEN` (ch 3), each with rest 90 and press 60. It sets the URLs to `https://cupkit.nl/messedup/admin/t/isstt-36/c/senior/results` and `.../rounds`.
+`config.example.toml` defines actuators `SC1` (ch 0), `SC2` (ch 1), `SC3` (ch 2) and `SPREKEN` (ch 3), each with rest 90 and press 60. It sets `matches_urls = ["https://cupkit.nl/messedup/isstt-36/senior/matches"]` and the `round_minutes` above.
 
 - [ ] **Step 1: `uv init --package --name announcer`** and add the dependencies from the Tech Stack. Set `requires-python = ">=3.12"`, `[tool.pytest.ini_options] asyncio_mode = "auto"`. Run `uv sync`. Expected: it exits 0.
 - [ ] **Step 2: Write the failing tests**
@@ -131,7 +130,8 @@ def test_spreken_required(tmp_path):                  # no SPREKEN actuator -> C
 def test_forbidden_button_names_rejected(tmp_path):   # actuator named "ONTRUIMINGSALARM" or "KOPPEL_RUIMTES" -> ConfigError
 def test_duplicate_channel_rejected(tmp_path):        # two actuators on channel 0 -> ConfigError
 def test_angles_out_of_range_rejected(tmp_path):      # press=181 -> ConfigError
-def test_cookie_env_overrides_file(tmp_path, monkeypatch)
+def test_round_minutes_loaded():  # example config -> round_minutes["Round 1"] == 15, round_minutes["Round 5"] == 20
+def test_round_minutes_must_be_positive(tmp_path):  # 0 -> ConfigError
 ```
 
 - [ ] **Step 3: Run** `uv run pytest tests/test_config.py -v`. Expected: FAIL (import error).
@@ -157,48 +157,44 @@ def test_cookie_env_overrides_file(tmp_path, monkeypatch)
 **Files:**
 - Create: `src/announcer/schedule/{__init__,source,cupkit,filesource,store}.py`
 - Test: `tests/test_cupkit.py`, `tests/test_filesource.py`, `tests/test_store.py`
-- Fixtures: `docs/reference/cupkit-results.html`, `docs/reference/cupkit-rounds.html`
+- Fixture: `docs/reference/cupkit-public-matches.html` (public page, saved 2026-11-01)
 
 **Interfaces:**
 - Consumes: `Match`, `Config.schedule`
 - Produces:
   - `ScheduleSource` protocol: `async fetch() -> list[Match]`. Raises `SourceError` on any failure.
-  - `parse_rounds_html(html: str) -> dict[str, int]` maps round name to match minutes, e.g. `{"Round 1": 20, ...}`. Take the part of the `h3` before `·`; minutes come from the chip matching `(\d+) \+ \d+ min`.
-  - `parse_results_html(html: str, round_minutes: dict[str, int], tz: str) -> list[Match]`. Each `section` has a round `h3`. Each `tbody tr` gives: first `td` text = `"18 December 2026 at 09:00"` and its `span` = `"SC1, Field 1"`; second `td` = `"A1 v A4"`; last `td` = referee. Raise `SourceError` if the page has no results table (login page, error page).
-  - `CupkitSource(results_urls, rounds_urls, cookie, tz)`: httpx `AsyncClient` with a `Cookie` header and a 15 s timeout. Concatenate matches from all results URLs.
+  - `parse_matches_html(html: str, tz: str) -> list[Match]`. Ignore `<script>` content (the Next.js payload repeats the class names). Structure: each `<section>` has the round name in `h2` (class contains `roundName`, e.g. `"Round 1"`). Inside it, each `div` with class containing `__time` has an `h3` (class `moment`) = `"18 December 2026 at 09:00"` and a list of `li` (class `line`). Each `li` has `span.where` = `"SC1, Field 1 · Poule A"`, two `span.side` = teams, `span.referee` = `"Referee: E1"` and `span.score`. Match class names by substring (`roundName`, `moment`, `where`, `side`, `referee`), because the CSS-module hash suffix can change between deploys. `match_minutes` stays `None`; the planner takes it from `round_minutes`. Raise `SourceError` if no matches are found.
+  - `CupkitSource(matches_urls, tz)`: httpx `AsyncClient` with a 15 s timeout, no auth. Concatenate matches from all URLs (one per category).
   - `FileSource(path, tz)` reads JSON: `{"matches": [{"start": "2026-12-18T09:00", "hall": "SC1", "field": "Field 1", "home": "A1", "away": "A4", "referee": "E1", "round": "Round 1", "match_minutes": 20}]}`. Naive times get the tz; `match_minutes` is optional.
   - `store.save(matches, path)` / `store.load(path, tz) -> list[Match]` use the same JSON format as `FileSource`, written atomically (tmp file + rename).
 
-- [ ] **Step 1: Check the public page first (manual, 5 min).** Open `https://cupkit.nl/messedup/isstt-36/senior` logged out. If it lists times and fields, put that URL in `config.example.toml` instead, and keep the cookie optional. Record the finding in the commit message.
 - [ ] **Step 2: Failing tests**
 
 ```python
-def test_rounds_minutes():
-    assert parse_rounds_html(ROUNDS) == {f"Round {i}": 20 for i in range(1, 6)}
-
-def test_results_parses_all_matches():
-    ms = parse_results_html(RESULTS, parse_rounds_html(ROUNDS), "Europe/Amsterdam")
+def test_parses_all_matches():
+    ms = parse_matches_html(PUBLIC, "Europe/Amsterdam")
     assert len(ms) == 198
     first = min(ms, key=lambda m: (m.start, m.field))
     assert first.start == datetime(2026, 12, 18, 9, 0, tzinfo=ZoneInfo("Europe/Amsterdam"))
     assert (first.hall, first.field, first.home, first.away, first.referee, first.round_name) == \
         ("SC1", "Field 1", "A1", "A4", "E1", "Round 1")
-    assert first.match_minutes == 20
+    assert first.match_minutes is None
     assert len({m.start for m in ms}) == 39
     assert {m.hall for m in ms} == {"SC1", "SC2", "SC3"}
+    assert {m.round_name for m in ms} == {f"Round {i}" for i in range(1, 6)}
 
-def test_login_page_is_source_error():
+def test_page_without_matches_is_source_error():
     with pytest.raises(SourceError):
-        parse_results_html("<html><form>Sign in</form></html>", {}, "Europe/Amsterdam")
+        parse_matches_html("<html><main><h2>Senior</h2></main></html>", "Europe/Amsterdam")
 
 async def test_cupkit_http_error_is_source_error(httpx_mock_or_transport)  # 500 / timeout -> SourceError
 def test_filesource_roundtrip_with_store(tmp_path)  # store.save -> FileSource.fetch gives equal matches
 ```
 
 Use `httpx.MockTransport` for the HTTP test; no network in tests.
-- [ ] **Step 3: Run, expect FAIL. Implement. Run, expect PASS.**
-- [ ] **Step 4: Live check (manual).** With `CUPKIT_COOKIE` set to the browser's session cookie (copy it from Firefox devtools → Storage), run `uv run python -c "…CupkitSource(...).fetch()…"`. Expected: 198 matches (or the current count).
-- [ ] **Step 5: Commit** `feat: cupkit scraper, file source, schedule store`.
+- [ ] **Step 2: Run, expect FAIL. Implement. Run, expect PASS.**
+- [ ] **Step 3: Live check (manual).** Run `uv run python -c "…CupkitSource(...).fetch()…"`. Expected: 198 matches (or the current count).
+- [ ] **Step 4: Commit** `feat: cupkit public-page scraper, file source, schedule store`.
 
 ### Task 4: Planner
 
@@ -209,7 +205,7 @@ Use `httpx.MockTransport` for the HTTP test; no network in tests.
 **Interfaces:**
 - Consumes: `Match`, `Announcement`, `Session`, `Config`
 - Produces:
-  - `plan_announcements(matches: list[Match], default_minutes: int) -> list[Announcement]`: one `match_start` per distinct start time, and one `match_end` per distinct `start + (match_minutes or default_minutes)`. Each carries its matches. Sorted by `due`; at equal `due`, end comes before start.
+  - `plan_announcements(matches: list[Match], round_minutes: dict[str, int], default_minutes: int) -> list[Announcement]`: one `match_start` per distinct start time, and one `match_end` per distinct `start + minutes`, where minutes = `match.match_minutes` if set, else `round_minutes[match.round_name]`, else `default_minutes`. Each carries its matches. Sorted by `due`; at equal `due`, end comes before start.
   - `group_sessions(anns: list[Announcement], halls: Sequence[str], merge_window_s: float, lead_s: float) -> list[Session]`: walk in order; an announcement joins the current session if its `due - session_first.due <= merge_window_s`. `start_at = first.due - lead_s`.
   - `render_message(template: str, ann: Announcement) -> str`: `str.format_map` with keys `time` (`HH:MM` of `due`), `count` (number of matches), `fields` (comma-joined distinct fields), `halls` (comma-joined distinct halls). Plain text passes through unchanged. This is the hook for richer messages later (spec §5.5); config load rejects templates with unknown placeholders.
   - `lead_seconds(cfg: Config) -> float`: `cfg.announce.lead_seconds` if set, else `sum((press_ms + release_ms) of each hall)/1000 + SPREKEN.press_ms/1000 + chime_seconds`.
@@ -218,18 +214,20 @@ Use `httpx.MockTransport` for the HTTP test; no network in tests.
 
 ```python
 def test_fixture_counts():
-    anns = plan_announcements(fixture_matches(), 20)
+    anns = plan_announcements(fixture_matches(), ROUND_MINUTES, 20)   # ROUND_MINUTES = 15,15,20,20,20
     assert sum(a.kind == "match_start" for a in anns) == 39
     assert sum(a.kind == "match_end" for a in anns) == 39
+    first_end = min(a.due for a in anns if a.kind == "match_end")
+    assert first_end.strftime("%d %H:%M") == "18 09:15"    # Round 1 = 15 min
 
 def test_collisions_merge_end_first():
-    sessions = group_sessions(plan_announcements(fixture_matches(), 20), ["SC1","SC2","SC3"], 30, 5)
-    assert len(sessions) == 75
+    sessions = group_sessions(plan_announcements(fixture_matches(), ROUND_MINUTES, 20), ["SC1","SC2","SC3"], 30, 5)
+    assert len(sessions) == 76
     merged = [s for s in sessions if len(s.announcements) == 2]
-    assert [s.announcements[0].due.strftime("%d %H:%M") for s in merged] == ["19 13:20", "19 14:55", "19 16:30"]
+    assert [s.announcements[0].due.strftime("%d %H:%M") for s in merged] == ["19 14:55", "19 16:30"]
     assert all([a.kind for a in s.announcements] == ["match_end", "match_start"] for s in merged)
 
-def test_unknown_round_uses_default_minutes():  # match_minutes=None, default 20 -> end = start + 20 min
+def test_unknown_round_uses_default_minutes():  # round "Round 6" not in round_minutes, default 20 -> end = start + 20 min
 def test_render_plain_and_placeholders():  # plain default text unchanged; "{count} matches at {time}" -> "7 matches at 09:00" for the 18 Dec 09:00 start
 def test_lead_seconds_computed():  # 3 halls at 250+250 ms, SPREKEN press 250 ms, chime 3.0 -> 4.75
 def test_lead_seconds_override():  # lead_seconds=7 -> 7
@@ -330,7 +328,7 @@ async def test_stop_releases_all()
     - **Settings:** message texts with "Preview" (synth + play on the laptop's default device), hall selection, poll interval.
 - [ ] **Step 1: Failing test:** `test_cli_parses_sim_args` (argument parsing builds `SimClock` with the given start/speed and `MockController` when `--mock`).
 - [ ] **Step 2: Run, expect FAIL. Implement. Run, expect PASS.**
-- [ ] **Step 3: Dress rehearsal (manual).** `uv run announcer --mock --source file --sim-start 2026-12-19T13:10 --sim-speed 60`, using `schedule.json` exported from the fixture via `store.save`. Expected: the merged 13:20 session plays end then start audio; pause/resume works; skip appears after pausing past a due time. Repeat a full day 18 Dec at `--sim-speed 600` and check that history shows 24 sessions played (12 start + 12 end).
+- [ ] **Step 3: Dress rehearsal (manual).** `uv run announcer --mock --source file --sim-start 2026-12-19T14:45 --sim-speed 60`, using `schedule.json` exported from the fixture via `store.save`. Expected: the merged 14:55 session plays end then start audio; pause/resume works; skip appears after pausing past a due time. Repeat a full day 18 Dec at `--sim-speed 600` and check that history shows 24 sessions played (12 start + 12 end).
 - [ ] **Step 4: Commit** `feat: NiceGUI interface, CLI, sleep inhibit`.
 
 ### Task 8: Firmware (NUCLEO-F767ZI)
@@ -401,7 +399,7 @@ Parameters, all in one params file: case outer width/depth/height, edge profile,
 **Files:**
 - Create: `docs/onsite-checklist.md`
 
-- [ ] **Step 1: Full bench rehearsal** on the replica with all 4 servos, the speaker at a spare microphone (or phone recording), and the real Cupkit source. Run `--sim-start 2026-12-19T13:10 --sim-speed 1` for 20 minutes. Expected: every session taps the halls, holds SPREKEN through the chime and the speech, and releases; the 13:20 merged session plays end then start. Then pull USB mid-hold → servo back at rest within 2 s.
+- [ ] **Step 1: Full bench rehearsal** on the replica with all 4 servos, the speaker at a spare microphone (or phone recording), and the real Cupkit source. Run `--sim-start 2026-12-19T14:45 --sim-speed 1` for 20 minutes. Expected: every session taps the halls, holds SPREKEN through the chime and the speech, and releases; the 14:55 merged session plays end then start. Then pull USB mid-hold → servo back at rest within 2 s.
 - [ ] **Step 2: Write `docs/onsite-checklist.md`** (morning of 18 Dec, ≤ 1 h):
   1. Mount the frame; confirm the evacuation alarm cover opens.
   2. Power up; `EVT BOOT`; dashboard shows the controller connected.

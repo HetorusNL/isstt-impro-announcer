@@ -24,7 +24,7 @@ up on the real desk takes well under the few hours available that morning.
 
 ## 2. Goals
 
-1. Read the match timetable from Cupkit (scrape now; API later, see §6) and
+1. Read the match timetable from Cupkit's public matches page (API later, see §5.7) and
    keep it up to date during the tournament (later rounds are filled in as
    results come in).
 2. At each match start time: announce *"Referees, you may start the
@@ -120,12 +120,12 @@ A single human-editable config file (e.g. TOML), editable from the GUI too:
 - `chime_seconds`, `tail_seconds`, `deselect_zones_after`, `lead_seconds`
   override (see 5.6), late-announcement threshold.
 - Message texts, Piper voice/model, speech rate, output audio device, volume.
-- Schedule source settings (URL, tournament id, credentials/token location,
-  poll interval).
+- Schedule source settings (matches page URL(s), poll interval) and match
+  length per round (§5.6).
 - Serial port of the controller.
 
-Secrets (password/token) are kept out of the config file and out of git
-(e.g. env var or separate untracked file).
+No secrets are needed now (public page). A future API token is kept out of
+the config file and out of git (env var or separate untracked file).
 
 ### 5.5 Messages
 
@@ -143,9 +143,12 @@ Secrets (password/token) are kept out of the config file and out of git
 
 - A **slot** = all matches with the same start time. Each slot produces one
   start announcement at `start` and one end announcement at `start + match
-  minutes of that round` (Cupkit rounds say "20 + 5 min" = 20 min match,
-  5 min changeover; read it from the round where possible, configurable
-  default 20).
+  minutes of that round`.
+- **Match length per round is set in config** (Tim, 2026-11-01): Round 1 and
+  Round 2 (poules) = **15 min**, Round 3–5 (knockout) = **20 min**, 5 min
+  break between matches. Unknown rounds use a default of 20 min. Editable in
+  the GUI. (The organiser Rounds page says "20 + 5 min" for every round; that
+  is not what will be played, and it isn't public anyway.)
 - Follow listed times exactly; the schedule is irregular (odd 20-minute gaps,
   one-match slots, long breaks between rounds while the committee prepares
   the next one).
@@ -169,14 +172,14 @@ Secrets (password/token) are kept out of the config file and out of git
 
 ### 5.7 Schedule source
 
-- **Now: scraper.** Cupkit organiser pages require login. The Results page
-  (`docs/reference/cupkit-results.html`) lists per round/poule: start time
-  ("18 December 2026 at 09:00"), location ("SC1, Field 1"), teams ("A1 v A4"),
-  referee. The Rounds page (`docs/reference/cupkit-rounds.html`) gives per
-  round "20 + 5 min". The site is a Next.js app; data is also embedded in
-  the RSC payload (`self.__next_f`). There may be other views/exports worth
-  checking. The scraper logs in itself with organiser credentials or a
-  session cookie supplied by Tim.
+- **Now: scraper of the public matches page**
+  `https://cupkit.nl/messedup/isstt-36/senior/matches` (no login; saved copy
+  `docs/reference/cupkit-public-matches.html`). Per round, per start time
+  ("18 December 2026 at 09:00"): hall and field ("SC1, Field 1"), poule,
+  teams ("A1 v A4"), referee, score or "To be played". It holds all 198
+  matches / 39 start times, the same as the organiser pages. It has no match
+  length, which comes from config (§5.6). Organiser/admin pages are not used
+  and must not be committed.
 - **Later: API.** The site owner has been asked to add
   `GET /api/v1/tournaments/{id}/schedule` (bearer token, ETag/304, separate
   hall/field, per-round match minutes, ISO times, status). Not guaranteed
@@ -285,7 +288,7 @@ Therefore:
   those available, pin assignment.
 - 3D-printed part designs (within the stiffness and no-marks requirements).
 - Internal software architecture, file formats, persistence details.
-- Scraping technique (HTML vs. embedded payload), login mechanics.
+- Scraping technique (HTML parsing details).
 - GUI layout.
 - Piper voice choice (pending Tim's preference; a clear English voice by
   default).
