@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -10,6 +11,8 @@ from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from announcer.model import Match
 from announcer.schedule.source import SourceError
+
+log = logging.getLogger(__name__)
 
 # CSS-module class names carry a hash suffix that changes per deploy, so match by substring.
 MOMENT_FORMAT = "%d %B %Y at %H:%M"
@@ -24,6 +27,7 @@ def _parse_line(li: LexborNode, start: datetime, round_name: str) -> Match | Non
     where = _text(li.css_first('span[class*="where"]'))
     sides = [_text(s) for s in li.css('span[class*="side"]')]
     if not where or len(sides) != 2:
+        log.warning("skipping unparseable match line: %r", _text(li))
         return None
     place, _, _poule = where.partition(" · ")
     hall, _, field = place.partition(", ")

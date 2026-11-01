@@ -59,6 +59,9 @@ def load(path: Path, tz: str) -> list[Match]:
     """Read the JSON schedule format. Raises SourceError on a missing or malformed file."""
     try:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        return [_from_dict(d, ZoneInfo(tz)) for d in raw["matches"]]
+        matches = [_from_dict(d, ZoneInfo(tz)) for d in raw["matches"]]
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         raise SourceError(f"cannot read schedule {path}: {e!r}") from e
+    if not matches:
+        raise SourceError(f"schedule {path} contains no matches")
+    return matches

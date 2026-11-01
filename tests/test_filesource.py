@@ -42,3 +42,11 @@ async def test_wrong_shape_is_source_error(tmp_path):
     path.write_text('{"matches": [{"start": "2026-12-18T09:00"}]}')
     with pytest.raises(SourceError):
         await FileSource(path, TZ).fetch()
+
+
+@pytest.mark.parametrize("content", ['{"matches": []}', "[]"])
+async def test_empty_schedule_is_source_error(tmp_path, content):
+    path = tmp_path / "s.json"
+    path.write_text(content)
+    with pytest.raises(SourceError):
+        await FileSource(path, TZ).fetch()

@@ -62,3 +62,20 @@ async def test_cupkit_network_failure_is_source_error():
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         with pytest.raises(SourceError):
             await CupkitSource(["https://x.test/a"], TZ, client=client).fetch()
+
+
+def test_malformed_line_is_logged_and_skipped(caplog):
+    html = (
+        '<section><h2 class="x__roundName">Round 1</h2><div class="x__time">'
+        '<h3 class="x__moment">18 December 2026 at 09:00</h3><ul>'
+        '<li class="x__line"><span class="x__where">SC1, Field 1 · Poule A</span>'
+        '<span class="x__side">A1</span><span class="x__side">A4</span>'
+        '<span class="x__referee">Referee: E1</span></li>'
+        '<li class="x__line"><span class="x__where">SC1, Field 2 · Poule A</span>'
+        '<span class="x__side">A2</span></li>'
+        "</ul></div></section>"
+    )
+    with caplog.at_level("WARNING", logger="announcer.schedule.cupkit"):
+        ms = parse_matches_html(html, TZ)
+    assert len(ms) == 1
+    assert any("Field 2" in r.getMessage() for r in caplog.records)
