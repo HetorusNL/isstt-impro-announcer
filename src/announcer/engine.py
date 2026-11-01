@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import string
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -97,6 +98,13 @@ class Engine:
         self._talk_task: asyncio.Task[None] | None = None
         self._talk_stop: asyncio.Event | None = None
         self._stopped = False
+        self.current: Session | None = None  # the desk session running now (GUI)
+        # TTS synthesised ahead of start_at (spec 5.6: first word on the minute)
+        self._audio: dict[str, Path] = {}
+        self._synth_pending: set[str] = set()
+        self._synth_failed: set[str] = set()  # pre-synth failed: synthesise at start_at
+        self._bg: set[asyncio.Task[None]] = set()  # pre-synth tasks
+        self._synth_gen = 0  # bumped on reload_config: results of older pre-synths are dropped
 
     @property
     def talking(self) -> bool:
@@ -113,6 +121,7 @@ class Engine:
         await self._fetch()
         self._mark_missed()
         self._replan()
+        self._prewarm()
         self._poll_task = asyncio.create_task(self._poll_loop(), name="engine-poll")
         self._run_task = asyncio.create_task(self._run_loop(), name="engine-run")
 
@@ -122,7 +131,13 @@ class Engine:
             while True:
                 tasks = [
                     t
-                    for t in (self._poll_task, self._run_task, self._talk_task, *self._sessions)
+                    for t in (
+                        self._poll_task,
+                        self._run_task,
+                        self._talk_task,
+                        *self._sessions,
+                        *self._bg,
+                    )
                     if t is not None and not t.done()
                 ]
                 if not tasks:
@@ -145,17 +160,21 @@ class Engine:
         self.paused = False
 
     async def play_now(self, key: Key) -> None:
-        """Play a skipped or missed announcement now, as its own session (even if paused)."""
+        """Play a skipped, missed or failed announcement now, as its own session (even if paused)."""
         self._check_running()
         if key not in self._replayable:
-            raise KeyError(f"{key} is not a skipped or missed announcement")
-        ann, halls = self._replayable[key]
-        session = Session(self._clock.now(), (ann,), halls)
+            raise KeyError(f"{key} is not a skipped, missed or failed announcement")
         async with self._lock:
-            if key not in self._replayable:  # played by a concurrent play_now meanwhile
+            entry = self._replayable.pop(key, None)
+            if entry is None:  # played by a concurrent play_now meanwhile
                 return
-            if await self._run_desk(session):
-                del self._replayable[key]
+            ann, halls = entry
+            recorded = False
+            try:
+                recorded = await self._run_desk(Session(self._clock.now(), (ann,), halls))
+            finally:
+                if not recorded:  # cancelled: still replayable
+                    self._replayable.setdefault(key, entry)
 
     async def manual_text(self, halls: Sequence[str], text: str) -> None:
         """Queue a spoken text; it waits for running sessions and for resume."""
@@ -176,6 +195,8 @@ class Engine:
         await asyncio.wait({started, self._talk_task}, return_when=asyncio.FIRST_COMPLETED)
         if not started.done():  # the talk ended before SPREKEN was held
             started.cancel()
+            if self._talk_task.cancelled():  # by stop() while waiting for the lock
+                raise RuntimeError("engine stopped")
             await self._talk_task  # re-raises its error
 
     async def talk_stop(self) -> None:
@@ -191,10 +212,18 @@ class Engine:
             log.exception("talk ended with an error")
 
     async def reload_config(self, cfg: Config) -> None:
-        async with self._lock:  # configure moves servos: never during a session
-            self.cfg = cfg
-            await self._ctrl.configure(cfg.actuators)
-        self._replan()
+        """Configure the controller, then swap the config (only if that succeeded); replan."""
+        try:
+            async with self._lock:  # configure moves servos: never during a session
+                await self._ctrl.configure(cfg.actuators)
+                self.cfg = cfg
+                self._audio.clear()  # texts or voice may have changed
+                self._synth_failed.clear()
+                self._synth_pending.clear()
+                self._synth_gen += 1
+        finally:
+            self._replan()
+        self._prewarm()
 
     # schedule
 
@@ -224,13 +253,18 @@ class Engine:
     async def _poll_loop(self) -> None:
         while True:
             await self._clock.sleep(self.cfg.schedule.poll_seconds)
-            await self._fetch()
-            self._replan()
+            try:
+                await self._fetch()
+                self._replan()
+            except Exception:
+                log.exception("poll/replan failed")
 
     def _planned(self) -> list[Announcement]:
         sched = self.cfg.schedule
         anns = plan_announcements(self._matches, sched.round_minutes, sched.default_match_minutes)
-        return [a for a in anns if a.key not in self._handled]  # before grouping
+        running = {a.key for a in self.current.announcements} if self.current else set()
+        # drop handled (and running) before grouping: a partly handled session never replays
+        return [a for a in anns if a.key not in self._handled and a.key not in running]
 
     def _replan(self) -> None:
         ann = self.cfg.announce
@@ -253,7 +287,7 @@ class Engine:
         for a in anns:
             self.history.append(HistoryEntry(now, a.key, status, detail))
             self._handled.add(a.key)
-            if status in ("skipped", "missed"):
+            if status in ("skipped", "missed", "failed"):
                 self._replayable[a.key] = (a, halls)
         self._save_handled()
 
@@ -296,30 +330,44 @@ class Engine:
                 log.exception("run loop step failed")
                 await self._clock.sleep(TICK_S)
 
-    async def _step(self) -> None:
-        now = self._clock.now()
-        # late scheduled sessions are skipped, also while paused or busy
+    def _skip_late(self, now: datetime) -> None:
+        """Skip late scheduled sessions, also while paused or busy."""
         while self.upcoming and now >= self.upcoming[0].start_at:
             first = self.upcoming[0]
             if not self._is_late(first, now):
                 break
             self.upcoming.pop(0)
             self._record(first.announcements, first.halls, "skipped", "late")
-        sched = self.upcoming[0] if self.upcoming else None
-        if not self.paused and not self._lock.locked():
-            candidates = [s for s in (sched,) if s is not None and now >= s.start_at]
-            candidates += self._manual[:1]
-            if candidates:
-                session = min(candidates, key=lambda s: s.start_at)
-                async with self._lock:
-                    if session in self._manual:
-                        self._manual.remove(session)
+
+    def _pick(self, now: datetime) -> Session | None:
+        """The session to run now, or None."""
+        if self.paused:
+            return None
+        candidates = self._manual[:1]
+        if self.upcoming and now >= self.upcoming[0].start_at:
+            candidates.append(self.upcoming[0])
+        return min(candidates, key=lambda s: s.start_at) if candidates else None
+
+    async def _step(self) -> None:
+        now = self._clock.now()
+        self._skip_late(now)
+        self._presynth_next()
+        if not self._lock.locked() and self._pick(now) is not None:
+            async with self._lock:
+                # we may have queued behind another lock holder: decide again under the lock
+                now = self._clock.now()
+                self._skip_late(now)
+                session = self._pick(now)
+                if session is not None:
+                    if self._manual and session is self._manual[0]:
+                        self._manual.pop(0)
                     await self._run_desk(session)
-                self._replan()
-                return
+                    self._replan()
+                    return
+        now = self._clock.now()
         delay = TICK_S
-        if sched is not None and now < sched.start_at:
-            delay = min(delay, (sched.start_at - now).total_seconds())
+        if self.upcoming and now < self.upcoming[0].start_at:
+            delay = min(delay, (self.upcoming[0].start_at - now).total_seconds())
         await self._clock.sleep(delay)
 
     async def _run_desk(self, session: Session) -> bool:
@@ -330,7 +378,13 @@ class Engine:
         task = asyncio.create_task(self._desk(session), name="engine-session")
         self._sessions.add(task)
         task.add_done_callback(self._sessions.discard)
-        await _settle(task)
+        self.current = session
+        if self.upcoming and self.upcoming[0] is session:
+            self.upcoming.pop(0)
+        try:
+            await _settle(task)
+        finally:
+            self.current = None
         if task.cancelled():
             log.warning("session cancelled")
             return False
@@ -343,7 +397,11 @@ class Engine:
         return True
 
     async def _desk(self, session: Session) -> None:
-        audio = [await self._tts.synth(self._text(a)) for a in session.announcements]
+        audio = []
+        for ann in session.announcements:
+            text = self._text(ann)
+            path = self._audio.get(text)
+            audio.append(path if path is not None else await self._tts.synth(text))
         await run_session(self._ctrl, self._player, self._clock, self.cfg, session.halls, audio)
 
     def _text(self, ann: Announcement) -> str:
@@ -351,13 +409,68 @@ class Engine:
             return ann.text or ""
         return render_message(self.cfg.messages[ann.kind], ann)
 
+    # TTS ahead of time
+
+    def _prewarm(self) -> None:
+        """Synthesise the placeholder-free message templates in the background."""
+        plain = [
+            t.format_map({})
+            for t in self.cfg.messages.values()
+            if all(field is None for _, field, _, _ in string.Formatter().parse(t))
+        ]
+        self._spawn_synth(plain)
+
+    def _presynth_next(self) -> None:
+        if self.upcoming:
+            self._spawn_synth([self._text(a) for a in self.upcoming[0].announcements])
+
+    def _spawn_synth(self, texts: Sequence[str]) -> None:
+        todo = [
+            t
+            for t in dict.fromkeys(texts)
+            if t not in self._audio and t not in self._synth_pending and t not in self._synth_failed
+        ]
+        if not todo or self._stopped:
+            return
+        self._synth_pending.update(todo)
+        task = asyncio.create_task(self._synth_all(todo, self._synth_gen), name="engine-presynth")
+        self._bg.add(task)
+        task.add_done_callback(self._bg.discard)
+
+    async def _synth_all(self, texts: list[str], gen: int) -> None:
+        for text in texts:
+            try:
+                path = await self._tts.synth(text)
+                if gen == self._synth_gen:
+                    self._audio[text] = path
+            except Exception:
+                log.exception("pre-synthesis failed; will synthesise at start_at: %r", text)
+                if gen == self._synth_gen:
+                    self._synth_failed.add(text)
+            finally:
+                if gen == self._synth_gen:
+                    self._synth_pending.discard(text)
+
     async def _talk(
         self, halls: tuple[str, ...], started: asyncio.Future[None], stop: asyncio.Event
     ) -> None:
         async with self._lock:
             if stop.is_set():  # stopped while waiting for the lock
                 return
+            max_hold = self.cfg.controller.max_hold_s
             async with talk_session(self._ctrl, self._clock, self.cfg, halls):
                 if not started.done():
                     started.set_result(None)
-                await stop.wait()
+                # end at talk_stop or max hold, so the desk lock is never held forever
+                waits = [
+                    asyncio.create_task(stop.wait()),
+                    asyncio.create_task(self._clock.sleep(max_hold)),
+                ]
+                try:
+                    await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    for w in waits:
+                        w.cancel()
+                    await asyncio.gather(*waits, return_exceptions=True)
+                if not stop.is_set():
+                    log.warning("talk reached max hold (%s s) without talk_stop: ended", max_hold)
