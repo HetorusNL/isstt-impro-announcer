@@ -685,3 +685,62 @@ async def test_reload_config_keeps_old_cfg_when_configure_fails(tmp_path):
     finally:
         rig.ctrl.fail_on = set()
         await engine.stop()
+
+
+async def test_bad_render_does_not_stall_engine(tmp_path, caplog):
+    # regression: a render error in pre-synth aborted every run-loop step
+    cfg = make_cfg()
+    cfg.messages["match_start"] = "Fields {fields:d}"  # bypasses validation; fails at render
+    rig = make_rig(tmp_path, at(8, 59, 30), cfg)
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        with caplog.at_level(logging.ERROR, logger="announcer.engine"):
+            await engine.manual_text(["SC1"], "manual still plays")
+            await until(lambda: len(engine.history) == 2)
+    finally:
+        await engine.stop()
+    (manual_key, manual_status), (sched_key, sched_status) = statuses(engine)
+    assert (manual_key[0], manual_status) == ("manual_text", "played")
+    assert (sched_key, sched_status) == (key("match_start", at(9, 0)), "failed")
+    assert "Unknown format code" in engine.history[1].detail
+    assert rig.played() == ["manual still plays"]
+    # logged once by pre-synth and once by the failed session, not every tick
+    assert len([r for r in caplog.records if "render" in r.getMessage()]) == 1
+
+
+async def test_reload_config_rebuilds_tts_when_tts_settings_change(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.write([match(at(9, 0))])
+    built: list = []
+
+    def factory(tts_cfg):
+        built.append(tts_cfg)
+        return FakeTts(tmp_path / "tts2", rig.clock)
+
+    engine = Engine(
+        rig.cfg,
+        FileSource(rig.schedule_file, TZ),
+        rig.store_path,
+        rig.ctrl,
+        rig.player,
+        rig.tts,
+        rig.clock,
+        tts_factory=factory,
+    )
+    await engine.start()
+    try:
+        same = make_cfg()
+        await engine.reload_config(same)  # tts settings unchanged: keep the instance
+        assert built == []
+        new = make_cfg()
+        new.tts.length_scale = 1.3
+        await engine.reload_config(new)
+        assert built == [new.tts]
+        await engine.manual_text(["SC1"], "new voice")
+        await until(lambda: engine.history != [])
+    finally:
+        await engine.stop()
+    assert engine.history[0].status == "played"
+    assert rig.player.played[-1].parent == tmp_path / "tts2"

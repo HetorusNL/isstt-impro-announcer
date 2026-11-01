@@ -123,3 +123,15 @@ def test_save_rejects_invalid_config(tmp_path):
     acts = {**cfg.actuators, "SC1": Actuator(channel=3, rest=90, press=60)}
     with pytest.raises(ConfigError):
         save(replace(cfg, actuators=acts), tmp_path / "out.toml")
+
+
+@pytest.mark.parametrize("template", ["Fields {fields:d}", "{count:%H}", "{time!z}"])
+def test_template_that_fails_to_render_rejected(tmp_path, template):
+    text = _example_text().replace("Referees, you may end the matches.", template)
+    with pytest.raises(ConfigError):
+        load(_write(tmp_path, text))
+
+
+def test_template_with_format_spec_that_renders_accepted(tmp_path):
+    text = _example_text().replace("Referees, you may end the matches.", "{count:d} at {time:>5}")
+    assert load(_write(tmp_path, text)).messages["match_end"] == "{count:d} at {time:>5}"

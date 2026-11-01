@@ -13,6 +13,8 @@ import tomli_w
 FORBIDDEN_BUTTONS = {"ONTRUIMINGSALARM", "KOPPEL_RUIMTES", "KOPPELRUIMTES"}
 ALLOWED_PLACEHOLDERS = {"time", "count", "fields", "halls"}
 REQUIRED_MESSAGES = ("match_start", "match_end")
+# sample values with the same types as planner.render_message, for a trial render
+SAMPLE_RENDER = {"time": "09:00", "count": 1, "fields": "Field 1", "halls": "SC1"}
 MAX_ANGLE = 180
 
 
@@ -106,6 +108,10 @@ def _check_template(name: str, template: str) -> None:
             raise ConfigError(
                 f"message {name!r} uses unknown placeholder {{{field_name}}}; allowed: {allowed}"
             )
+    try:
+        template.format_map(SAMPLE_RENDER)
+    except Exception as e:  # e.g. a format spec that does not fit the value: {fields:d}
+        raise ConfigError(f"message {name!r} cannot be rendered: {e}") from e
 
 
 def validate(cfg: Config) -> None:
