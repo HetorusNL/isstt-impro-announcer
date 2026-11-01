@@ -36,6 +36,14 @@ class SimClock:
         self._speed = speed
         self._t0 = time.monotonic()
 
+    @property
+    def start(self) -> datetime:
+        return self._start
+
+    @property
+    def speed(self) -> float:
+        return self._speed
+
     def now(self) -> datetime:
         return self._start + timedelta(seconds=(time.monotonic() - self._t0) * self._speed)
 
