@@ -297,7 +297,7 @@ async def test_talk_hold_release_before_start_returns_still_stops() -> None:
     await talk.release()
     engine.gate.set()
     await talk.wait()
-    assert engine.calls == ["start", "stop", "stop"]
+    assert engine.calls == ["start", "stop"]  # stop reaches the talk waiting for the lock
 
 
 async def test_talk_hold_release_before_task_runs_never_starts() -> None:
@@ -306,7 +306,7 @@ async def test_talk_hold_release_before_task_runs_never_starts() -> None:
     talk.press(["SC1"])
     await talk.release()
     await talk.wait()
-    assert engine.calls == ["stop"]
+    assert engine.calls == []  # talk_start never called, nothing to stop
 
 
 async def test_talk_hold_release_without_press_does_nothing() -> None:
@@ -319,7 +319,22 @@ async def test_talk_hold_release_without_press_does_nothing() -> None:
     await talk.release()  # mouseup then mouseleave
     engine.gate.set()
     await talk.wait()
-    assert engine.calls == ["start", "stop", "stop"]
+    assert engine.calls == ["start", "stop"]
+
+
+async def test_talk_hold_does_not_stop_another_tabs_talk() -> None:
+    class Busy(FakeTalkEngine):
+        async def talk_start(self, halls: tuple[str, ...]) -> None:
+            self.calls.append("start")
+            raise RuntimeError("a talk is already active")  # tab A is talking
+
+    engine = Busy()
+    tab_b = view.TalkHold(engine)
+    tab_b.press(["SC1"])
+    await tab_b.wait()
+    assert tab_b.error == "a talk is already active"
+    await tab_b.release()  # mouseup / disconnect of tab B
+    assert engine.calls == ["start"]  # no talk_stop: tab A keeps talking
 
 
 async def test_talk_hold_records_error() -> None:
@@ -331,3 +346,100 @@ async def test_talk_hold_records_error() -> None:
     talk.press(["SC1"])
     await talk.wait()
     assert talk.error == "engine stopped"
+
+
+class FakeServos:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, int | None]] = []
+        self.gate: asyncio.Event | None = None
+        self.fail = False
+
+    async def set_angle(self, button: str, angle: int) -> None:
+        if self.gate is not None:
+            await self.gate.wait()
+        if self.fail:
+            raise RuntimeError("serial gone")
+        self.calls.append(("set_angle", button, angle))
+
+    async def tap(self, button: str) -> None:
+        self.calls.append(("tap", button, None))
+
+    async def release_all(self) -> None:
+        self.calls.append(("release_all", "", None))
+
+
+async def test_calibrator_latest_value_wins() -> None:
+    servos = FakeServos()
+    servos.gate = asyncio.Event()
+    cal = view.Calibrator(servos, lambda: False)
+    cal.jog("SC1", 20, 10)
+    await asyncio.sleep(0)  # 20 is in flight
+    for angle in (25, 30, 35):
+        cal.jog("SC1", angle, 10)
+    servos.gate.set()
+    await cal.wait()
+    assert servos.calls == [("set_angle", "SC1", 20), ("set_angle", "SC1", 35)]
+    assert cal.away == {"SC1": 35}
+
+
+async def test_calibrator_spreken_press_returns_to_rest() -> None:
+    servos = FakeServos()
+    cal = view.Calibrator(servos, lambda: False, return_s=0.05)
+    cal.jog("SPREKEN", 60, 90)
+    await asyncio.sleep(0.03)
+    cal.jog("SPREKEN", 55, 90)  # still moving: the return is postponed
+    await asyncio.sleep(0.03)
+    assert servos.calls[-1] == ("set_angle", "SPREKEN", 55)
+    assert cal.away == {"SPREKEN": 55}
+    await cal.wait()
+    assert servos.calls[-1] == ("set_angle", "SPREKEN", 90)
+    assert cal.away == {}
+
+
+async def test_calibrator_other_presses_stay() -> None:
+    servos = FakeServos()
+    cal = view.Calibrator(servos, lambda: False, return_s=0.01)
+    cal.jog("SC1", 40, 10)
+    await asyncio.sleep(0.05)
+    assert servos.calls == [("set_angle", "SC1", 40)]
+    assert cal.away == {"SC1": 40}
+    assert await cal.tap("SC1")
+    assert cal.away == {}
+
+
+async def test_calibrator_release_all_clears_and_cancels() -> None:
+    servos = FakeServos()
+    cal = view.Calibrator(servos, lambda: False, return_s=0.02)
+    cal.jog("SPREKEN", 60, 90)
+    cal.jog("SC1", 40, 10)
+    assert await cal.release_all()
+    await asyncio.sleep(0.05)
+    assert servos.calls == [("release_all", "", None)]
+    assert cal.away == {}
+
+
+async def test_calibrator_refuses_while_busy() -> None:
+    servos = FakeServos()
+    busy = [True]
+    cal = view.Calibrator(servos, lambda: busy[0], return_s=0.01)
+    assert not cal.jog("SC1", 40, 10)
+    assert not await cal.tap("SC1")
+    assert not await cal.release_all()  # e.g. tab closed during a session
+    assert servos.calls == []
+    busy[0] = False
+    cal.jog("SPREKEN", 60, 90)
+    await asyncio.sleep(0)
+    busy[0] = True  # a session takes the desk before the return: it releases SPREKEN itself
+    await cal.wait()
+    assert servos.calls == [("set_angle", "SPREKEN", 60)]
+    assert cal.away == {}
+
+
+async def test_calibrator_records_errors() -> None:
+    servos = FakeServos()
+    servos.fail = True
+    cal = view.Calibrator(servos, lambda: False)
+    cal.jog("SC1", 40, 10)
+    await cal.wait()
+    assert cal.error is not None and "serial gone" in cal.error
+    assert cal.away == {}

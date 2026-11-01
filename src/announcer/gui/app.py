@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -13,6 +13,7 @@ from announcer.audio.player import SoundPlayer
 from announcer.config import SAMPLE_RENDER, Config
 from announcer.engine import Engine, Key
 from announcer.gui import view
+from announcer.sequencer import SPREKEN
 
 if TYPE_CHECKING:
     from announcer.main import Runtime
@@ -60,7 +61,8 @@ def serve(rt: Runtime, host: str, port: int) -> None:
 
     app.on_startup(startup)
     app.on_shutdown(shutdown)
-    _pages(rt, engine)
+    cal = view.Calibrator(rt.ctrl, lambda: view.desk_busy(engine))
+    _pages(rt, engine, cal)
     ui.run(
         host=host,
         port=port,
@@ -93,7 +95,7 @@ def _hall_boxes(cfg: Config, selected: list[str]) -> Callable[[], list[str]]:
     return lambda: [h for h, box in boxes.items() if box.value]
 
 
-def _pages(rt: Runtime, engine: Engine) -> None:
+def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
     @ui.page("/")
     def dashboard() -> None:
         _header(rt)
@@ -105,6 +107,7 @@ def _pages(rt: Runtime, engine: Engine) -> None:
             )
             ctrl = ui.label().classes("text-lg")
             talk = ui.label("TALKING").classes("text-lg bg-red-600 text-white px-2 rounded")
+            away = ui.label().classes("text-lg bg-orange-600 text-white px-2 rounded")
         banner = ui.label().classes("w-full bg-red-600 text-white p-2 text-lg")
         source = ui.label()
         playing = ui.label().classes("text-2xl bg-green-600 text-white px-2 rounded")
@@ -157,6 +160,10 @@ def _pages(rt: Runtime, engine: Engine) -> None:
             toggle.text = "Resume" if engine.paused else "Pause"
             ctrl.text = "controller connected" if rt.ctrl.connected else "CONTROLLER DISCONNECTED"
             talk.visible = engine.talking
+            away.visible = bool(cal.away)
+            away.text = "CALIBRATION: off rest: " + ", ".join(
+                f"{n} {a}" for n, a in sorted(cal.away.items())
+            )
             banner.text = f"Schedule source error: {engine.source_error}"
             banner.visible = engine.source_error is not None
             source.text = (
@@ -211,10 +218,13 @@ def _pages(rt: Runtime, engine: Engine) -> None:
                 ui.notify("select halls first", type="warning")
 
         btn = ui.button("Hold to talk").classes("text-2xl p-8")
-        for ev in ("mousedown", "touchstart"):
+        btn.style("touch-action: none; user-select: none; -webkit-user-select: none")
+        # touchstart.prevent: no emulated mousedown after a touch, so one press = one talk
+        for ev in ("mousedown", "touchstart.prevent"):
             btn.on(ev, press)
         for ev in ("mouseup", "mouseleave", "touchend", "touchcancel"):
             btn.on(ev, hold.release)
+        btn.on("contextmenu.prevent", lambda: None)  # long press: no menu
         ui.context.client.on_disconnect(hold.release)
         status = ui.label()
 
@@ -237,14 +247,32 @@ def _pages(rt: Runtime, engine: Engine) -> None:
             "Not while a session or talk is running."
         ).classes("bg-orange-200 p-2")
 
-        async def act(action: Callable[[], object], what: str) -> None:
-            if view.desk_busy(engine):
-                ui.notify("desk busy (session or talk running)", type="warning")
-                return
+        def refused() -> None:
+            ui.notify("desk busy (session or talk running)", type="warning")
+
+        async def act(action: Callable[[], Awaitable[bool]], what: str) -> None:
             try:
-                await action()  # type: ignore[misc]
+                if not await action():
+                    refused()
             except Exception as e:
                 ui.notify(f"{what} failed: {e!r}", type="negative")
+
+        def jog(name: str, slider: str, angle: float | None) -> None:
+            rest = sliders[name][1]
+            if angle is None or rest.value is None:
+                return
+            # moving the rest slider moves to rest; the press slider presses
+            target_rest = int(angle) if slider == "rest" else int(rest.value)
+            if not cal.jog(name, int(angle), target_rest):
+                refused()
+
+        async def release_on_close() -> None:
+            try:
+                await cal.release_all()  # refused (no-op) while a session or talk runs
+            except Exception:
+                log.exception("release_all on calibration tab close failed")
+
+        ui.context.client.on_disconnect(release_on_close)
 
         sliders: dict[str, tuple[ui.slider, ui.slider]] = {}
         for name, a in cfg.actuators.items():
@@ -253,25 +281,29 @@ def _pages(rt: Runtime, engine: Engine) -> None:
                     ui.label(name).classes("text-lg font-bold w-24")
                     ui.button(
                         "Test tap",
-                        on_click=partial(act, partial(rt.ctrl.tap, name), f"tap {name}"),
+                        on_click=partial(act, partial(cal.tap, name), f"tap {name}"),
                     )
+                    if name == SPREKEN:
+                        ui.label(
+                            f"press is temporary: back to rest {view.SPREKEN_RETURN_S:g} s "
+                            "after the slider stops"
+                        ).classes("text-sm")
                 pairs = []
                 for label, value in (("press", a.press), ("rest", a.rest)):
                     with ui.row().classes("w-full items-center"):
                         ui.label(label).classes("w-12")
                         s = ui.slider(min=0, max=180, step=1, value=value).props("label-always")
                         s.classes("grow")
-                        s.on_value_change(
-                            lambda e, n=name: act(
-                                partial(rt.ctrl.set_angle, n, int(e.value)), f"set_angle {n}"
-                            )
-                        )
+                        s.on_value_change(lambda e, n=name, k=label: jog(n, k, e.value))
                         pairs.append(s)
                 sliders[name] = (pairs[0], pairs[1])
-        ui.button(
-            "Release all (servos to rest)",
-            on_click=partial(act, rt.ctrl.release_all, "release_all"),
-        )
+        with ui.row().classes("items-center"):
+            ui.button(
+                "Release all (servos to rest)",
+                on_click=partial(act, cal.release_all, "release_all"),
+            )
+            cal_error = ui.label().classes("text-red-700")
+        ui.timer(REFRESH_S, lambda: cal_error.set_text(cal.error or ""))
 
         ann = cfg.announce
         with ui.card().classes("w-full max-w-3xl"):

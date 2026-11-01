@@ -149,6 +149,7 @@ class TalkHold:
         self._engine = engine
         self._task: asyncio.Task[None] | None = None
         self._released = True
+        self._owns = False  # this button started the engine's current talk
         self.error: str | None = None
 
     @property
@@ -165,22 +166,138 @@ class TalkHold:
     async def _run(self, halls: tuple[str, ...]) -> None:
         if self._released:
             return
+        # talk_start registers its talk before its first await, or raises at once if
+        # another tab's talk is active: so _owns is never True for a foreign talk
+        self._owns = True
         try:
             await self._engine.talk_start(halls)
         except Exception as e:
+            self._owns = False
+            self._released = True  # a later mouseup must not stop another tab's talk
             self.error = str(e) or repr(e)
             log.warning("talk did not start: %s", self.error)
             return
         if self._released:
+            await self._stop()
+
+    async def _stop(self) -> None:
+        if self._owns:
+            self._owns = False
             await self._engine.talk_stop()
 
     async def release(self) -> None:
-        """Stop this button's talk; a no-op if not pressed (another tab's talk keeps going)."""
+        """Stop this button's talk; a no-op if this button did not start one."""
         if self._released:
             return
         self._released = True
-        await self._engine.talk_stop()
+        await self._stop()
 
     async def wait(self) -> None:
         if self._task is not None:
             await asyncio.gather(self._task, return_exceptions=True)
+
+
+SPREKEN_RETURN_S = 1.5  # a calibration press of SPREKEN returns to rest after this idle time
+
+
+class _Servos(Protocol):
+    async def set_angle(self, button: str, angle: int) -> None: ...
+
+    async def tap(self, button: str) -> None: ...
+
+    async def release_all(self) -> None: ...
+
+
+class Calibrator:
+    """Calibration servo moves, shared by all calibration tabs.
+
+    Moves are serialised; a slider's latest value wins, so the servo always ends at the
+    final slider value. A live SPREKEN press is temporary: it returns to rest after
+    return_s without movement. `away` tracks actuators left off rest by calibration.
+    Every action is refused while is_busy() (a session or talk owns the desk).
+    """
+
+    def __init__(
+        self,
+        ctrl: _Servos,
+        is_busy: Callable[[], bool],
+        return_s: float = SPREKEN_RETURN_S,
+    ) -> None:
+        self._ctrl = ctrl
+        self._is_busy = is_busy
+        self._return_s = return_s
+        self.away: dict[str, int] = {}
+        self.error: str | None = None
+        self._pending: dict[str, tuple[int, int]] = {}  # name -> (angle, rest)
+        self._worker: asyncio.Task[None] | None = None
+        self._return: asyncio.Task[None] | None = None
+        self._lock = asyncio.Lock()
+
+    def jog(self, name: str, angle: int, rest: int) -> bool:
+        """Move name to angle (in the background). False if the desk is busy."""
+        if self._is_busy():
+            return False
+        self._pending[name] = (angle, rest)
+        if self._worker is None or self._worker.done():
+            self._worker = asyncio.create_task(self._drain(), name="calibration-jog")
+        if name == SPREKEN:
+            self._cancel_return()
+            if angle != rest:
+                self._return = asyncio.create_task(self._return_later(rest), name="spreken-rest")
+        return True
+
+    async def tap(self, name: str) -> bool:
+        if self._is_busy():
+            return False
+        async with self._lock:
+            await self._ctrl.tap(name)  # ends at rest
+            self.away.pop(name, None)
+        return True
+
+    async def release_all(self) -> bool:
+        if self._is_busy():
+            return False
+        self._cancel_return()
+        self._pending.clear()
+        async with self._lock:
+            await self._ctrl.release_all()
+            self.away.clear()
+        return True
+
+    async def wait(self) -> None:
+        """Wait for queued moves and a pending SPREKEN return (tests)."""
+        for task in (self._return, self._worker):
+            if task is not None:
+                await asyncio.gather(task, return_exceptions=True)
+        if self._worker is not None:  # the return may have queued a move
+            await asyncio.gather(self._worker, return_exceptions=True)
+
+    def _cancel_return(self) -> None:
+        if self._return is not None and self._return is not asyncio.current_task():
+            self._return.cancel()
+        self._return = None
+
+    async def _return_later(self, rest: int) -> None:
+        await asyncio.sleep(self._return_s)
+        self._return = None
+        if not self.jog(SPREKEN, rest, rest):
+            # a session or talk took the desk; it releases SPREKEN itself
+            self.away.pop(SPREKEN, None)
+
+    async def _drain(self) -> None:
+        while self._pending:
+            name = next(iter(self._pending))
+            angle, rest = self._pending.pop(name)
+            if self._is_busy():
+                continue
+            async with self._lock:
+                try:
+                    await self._ctrl.set_angle(name, angle)
+                except Exception as e:
+                    self.error = f"set_angle {name} failed: {e!r}"
+                    log.warning("%s", self.error)
+                    continue
+            if angle == rest:
+                self.away.pop(name, None)
+            else:
+                self.away[name] = angle

@@ -49,6 +49,10 @@ class Rehearsal:
         schedule = tmp_path / "schedule.json"
         store.save(parse_matches_html(html, TZ), schedule)
         self.cfg = config.load(REPO / "config.example.toml")
+        # at speed 2000 the default 60 s is ~30 ms of real time: a loaded machine would
+        # skip sessions as late. 600 s (0.3 s real) keeps the run deterministic; on-time
+        # playback is checked at speed 60 in the merged-session test.
+        self.cfg.announce.late_threshold_seconds = 600
         self.clock = SimClock(start, speed)
         self.ctrl = MockController(self.clock, self.cfg.actuators)
         self.player = MockPlayer(self.clock)
