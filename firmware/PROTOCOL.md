@@ -16,14 +16,14 @@ Build: `pio run -d firmware -e nucleo_f767zi` (or `-e nucleo_f746zg`); flash wit
 | Command | Reply | Effect |
 |---|---|---|
 | `PING` | `OK PONG` | Keep-alive. |
-| `REST <ch> <deg>` | `OK` | Store rest angle (EEPROM, only if changed), attach channel, move to rest. |
-| `ANGLE <ch> <deg>` | `OK` | Move servo (attaches if needed). |
+| `REST <ch> <deg>` | `OK` / `ERR flash` | Store rest angle (EEPROM, only if changed), attach channel, move to rest. `ERR flash`: flash readback mismatched; the rest is kept in RAM for this session only (the channel still moves to rest). |
+| `ANGLE <ch> <deg>` | `OK` / `ERR no rest` | Move servo. Refused (no movement) if the channel has no stored rest, so every driven channel is covered by the failsafes. Send `REST` first. |
 | `RELEASE <ch>` | `OK` / `ERR no rest` | Move channel to its stored rest. |
 | `RELEASE ALL` | `OK` | Move every channel with a stored rest to rest. |
-| `MAXHOLD <ms>` | `OK` | Max time away from rest (default 60000, 1..3600000). |
-| `WATCHDOG <ms>` | `OK` | Keep-alive timeout (default 2000, 1..3600000). |
+| `MAXHOLD <ms>` | `OK` | Max time away from rest (default 60000, 1..120000, else `ERR range`). |
+| `WATCHDOG <ms>` | `OK` | Keep-alive timeout (default 2000, 1..10000, else `ERR range`). |
 
-Channels are 0-7, degrees 0-180. Errors: `ERR args`, `ERR channel`, `ERR degrees`, `ERR value`,
+Channels are 0-7, degrees 0-180. Errors: `ERR args`, `ERR channel`, `ERR degrees`, `ERR value`, `ERR range`, `ERR flash`,
 `ERR unknown command`, `ERR empty`, `ERR no rest`, `ERR too long`.
 
 ## Events (asynchronous lines)
@@ -45,13 +45,26 @@ A channel with no stored rest is never attached at boot and never driven by any 
 
 ## EEPROM
 
-STM32 EEPROM emulation uses flash; a write erases a whole sector, which is slow (can take well over
-500 ms, up to a few seconds on the F7). Layout: byte 0 magic `0xA1`, bytes 1-8 rest angle per channel
+STM32 EEPROM emulation uses flash. Layout: byte 0 magic `0xA1`, bytes 1-8 rest angle per channel
 (`0xFF` = none). The buffered API (`eeprom_buffer_fill`/`eeprom_buffer_flush`) is used and a flush happens
 only when a value actually changes, so the host's `REST` for every actuator on each connect is normally
-free. A changing `REST` blocks the main loop during the erase (servos hold position, serial input
-buffers in the UART RX interrupt, but a long erase may overrun the RX buffer, so do not send further
-commands until `OK`). The IWDG timeout is relaxed to 5 s just around the flush.
+free. After each flush the bytes are read back; on mismatch the reply is `ERR flash` and the RAM value is
+kept for this session.
+
+A flash sector erase is slow (up to a few seconds on the F7) and **stalls the whole CPU**: the first
+received RX byte is buffered, further bytes are lost, and servo pulses and SysTick stall too. Therefore:
+the host must wait for `OK` after each `REST`, and should change a `REST` only while nothing is pressed.
+The IWDG is relaxed to 5 s just around the flush.
+
+LSI tolerance: the IWDG runs from the LSI RC oscillator, so the nominal 500 ms timeout can be about
+340 ms and the 5 s flush timeout about 3.4 s in practice.
+
+### NUCLEO-F746ZG limitation (spare board)
+
+The core's variant sets `FLASH_DATA_SECTOR 11`, which does not exist on the F746 (8 sectors). To avoid
+corrupting flash, the `nucleo_f746zg` env (`-DREST_RAM_ONLY`) keeps rests in RAM only and never touches
+flash. Rests are lost at power-off, so release-on-boot only works after the host has sent `REST`
+(until then no channel is attached or driven, and `ANGLE` returns `ERR no rest`).
 
 ## Pin table (one table in `src/main.cpp`, `PINS[]`)
 
@@ -90,3 +103,6 @@ The core's Servo library uses a software timer (TIM7), so it can drive any of th
 | Board on E5V: `ANGLE 0 60`, pull USB | Back at 90 within 2 s | |
 | `REST 0 90` again (unchanged) | `OK` immediately (no flash write) | |
 | Send a 100-char line | `ERR too long` | |
+| `ANGLE 1 60` with no rest stored for ch 1 | `ERR no rest`, no movement | |
+| `WATCHDOG 20000` / `MAXHOLD 200000` | `ERR range` | |
+| `REST 0 30`, power-cycle (F767) | rest still 30 (flash readback OK) | |

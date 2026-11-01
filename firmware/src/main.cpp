@@ -25,7 +25,8 @@ static const uint32_t TICK_MS = 10;
 static const size_t MAX_LINE = 64;
 static const uint32_t DEFAULT_MAXHOLD_MS = 60000;
 static const uint32_t DEFAULT_WATCHDOG_MS = 2000;
-static const uint32_t MAX_TIMER_MS = 3600000UL;
+static const uint32_t MAX_WATCHDOG_MS = 10000;
+static const uint32_t MAX_MAXHOLD_MS = 120000;
 
 // EEPROM layout: [0] magic/version, [1..8] rest angle per channel (0xFF=none)
 static const uint8_t EE_MAGIC = 0xA1;
@@ -35,7 +36,6 @@ static const uint8_t REST_NONE = 0xFF;
 static Servo servos[NUM_CH];
 static bool attached[NUM_CH];
 static uint8_t restDeg[NUM_CH];       // REST_NONE if not stored
-static uint8_t curDeg[NUM_CH];
 static bool away[NUM_CH];             // attached, with rest, and angle != rest
 static uint32_t awaySince[NUM_CH];
 
@@ -51,6 +51,12 @@ static bool discarding;
 
 // ---- EEPROM ---------------------------------------------------------------
 static void loadRest() {
+#ifdef REST_RAM_ONLY
+  // NUCLEO-F746ZG: the core's flash data sector (11) does not exist on this
+  // chip, so rests are RAM only and never touch flash.
+  for (uint8_t i = 0; i < NUM_CH; i++) restDeg[i] = REST_NONE;
+  return;
+#endif
   eeprom_buffer_fill();
   bool valid = eeprom_buffered_read_byte(0) == EE_MAGIC;
   for (uint8_t i = 0; i < NUM_CH; i++) {
@@ -60,7 +66,12 @@ static void loadRest() {
 }
 
 // Writes only if the stored value differs: flash sector erase is slow.
-static void storeRest(uint8_t ch, uint8_t deg) {
+// Returns false if the flash readback does not match (RAM value is kept).
+static bool storeRest(uint8_t ch, uint8_t deg) {
+#ifdef REST_RAM_ONLY
+  restDeg[ch] = deg;
+  return true;
+#endif
   bool dirty = false;
   if (eeprom_buffered_read_byte(0) != EE_MAGIC) {
     eeprom_buffered_write_byte(0, EE_MAGIC);
@@ -72,22 +83,34 @@ static void storeRest(uint8_t ch, uint8_t deg) {
     dirty = true;
   }
   restDeg[ch] = deg;
-  if (!dirty) return;
+  if (!dirty) return true;
   // Sector erase can take > 500 ms: relax IWDG just for the flush.
   IWatchdog.set(IWDG_FLASH_US);
   eeprom_buffer_flush();
   IWatchdog.set(IWDG_US);
   IWatchdog.reload();
+  // Verify: re-read flash and compare with what we meant to store.
+  uint8_t want[1 + NUM_CH];
+  for (uint8_t i = 0; i < 1 + NUM_CH; i++) want[i] = eeprom_buffered_read_byte(i);
+  eeprom_buffer_fill();
+  for (uint8_t i = 0; i < 1 + NUM_CH; i++) {
+    if (eeprom_buffered_read_byte(i) != want[i]) {
+      // Flash differs; restore the buffer to our intended contents.
+      for (uint8_t j = 0; j < 1 + NUM_CH; j++) eeprom_buffered_write_byte(j, want[j]);
+      return false;
+    }
+  }
+  return true;
 }
 
 // ---- servo helpers --------------------------------------------------------
 static void moveTo(uint8_t ch, uint8_t deg) {
   if (!attached[ch]) {
-    servos[ch].attach(PINS[ch]);
+    servos[ch].attach(PINS[ch], deg);  // first frame already at deg
     attached[ch] = true;
+  } else {
+    servos[ch].write(deg);
   }
-  servos[ch].write(deg);
-  curDeg[ch] = deg;
   bool nowAway = restDeg[ch] != REST_NONE && deg != restDeg[ch];
   if (nowAway && !away[ch]) awaySince[ch] = millis();
   away[ch] = nowAway;
@@ -150,13 +173,15 @@ static void handleLine(char* line) {
     if (n != 3) { Serial.println(F("ERR args")); return; }
     if (!parseChannel(tok[1], ch)) { Serial.println(F("ERR channel")); return; }
     if (!parseDeg(tok[2], deg)) { Serial.println(F("ERR degrees")); return; }
-    storeRest(ch, deg);
+    bool stored = storeRest(ch, deg);
     moveTo(ch, deg);
-    Serial.println(F("OK"));
+    Serial.println(stored ? F("OK") : F("ERR flash"));
   } else if (!strcmp(cmd, "ANGLE")) {
     if (n != 3) { Serial.println(F("ERR args")); return; }
     if (!parseChannel(tok[1], ch)) { Serial.println(F("ERR channel")); return; }
     if (!parseDeg(tok[2], deg)) { Serial.println(F("ERR degrees")); return; }
+    // No stored rest means no failsafe could ever release it: refuse.
+    if (restDeg[ch] == REST_NONE) { Serial.println(F("ERR no rest")); return; }
     moveTo(ch, deg);
     Serial.println(F("OK"));
   } else if (!strcmp(cmd, "RELEASE")) {
@@ -173,10 +198,9 @@ static void handleLine(char* line) {
     }
   } else if (!strcmp(cmd, "MAXHOLD") || !strcmp(cmd, "WATCHDOG")) {
     if (n != 2) { Serial.println(F("ERR args")); return; }
-    if (!parseUInt(tok[1], ms) || ms < 1 || ms > MAX_TIMER_MS) {
-      Serial.println(F("ERR value"));
-      return;
-    }
+    if (!parseUInt(tok[1], ms)) { Serial.println(F("ERR value")); return; }
+    uint32_t cap = (cmd[0] == 'M') ? MAX_MAXHOLD_MS : MAX_WATCHDOG_MS;
+    if (ms < 1 || ms > cap) { Serial.println(F("ERR range")); return; }
     if (cmd[0] == 'M') maxHoldMs = ms; else watchdogMs = ms;
     Serial.println(F("OK"));
   } else {
