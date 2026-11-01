@@ -17,9 +17,9 @@ REQUIRED_MESSAGES = ("match_start", "match_end")
 SAMPLE_RENDER = {"time": "09:00", "count": 1, "fields": "Field 1", "halls": "SC1"}
 MAX_ANGLE = 180
 MAX_CHANNEL = 7
-# firmware limits (firmware/PROTOCOL.md)
+# firmware limits (firmware/PROTOCOL.md): WATCHDOG and MAXHOLD caps
 MAX_WATCHDOG_MS = 10_000
-MAX_HOLD_S = 120
+MAX_MAXHOLD_MS = 120_000
 
 
 class ConfigError(Exception):
@@ -123,11 +123,12 @@ def validate(cfg: Config) -> None:
     c = cfg.controller
     if not 1 <= c.watchdog_ms <= MAX_WATCHDOG_MS:
         raise ConfigError(f"controller.watchdog_ms={c.watchdog_ms} not in 1..{MAX_WATCHDOG_MS}")
-    if not 1 <= c.max_hold_s <= MAX_HOLD_S:
-        raise ConfigError(f"controller.max_hold_s={c.max_hold_s} not in 1..{MAX_HOLD_S}")
-    if not 1 <= c.keepalive_ms < c.watchdog_ms:
+    max_hold_s = MAX_MAXHOLD_MS // 1000
+    if not 1 <= c.max_hold_s <= max_hold_s:
+        raise ConfigError(f"controller.max_hold_s={c.max_hold_s} not in 1..{max_hold_s}")
+    if not 1 <= c.keepalive_ms <= c.watchdog_ms // 2:  # a late ping must not trip the watchdog
         raise ConfigError(
-            f"controller.keepalive_ms={c.keepalive_ms} must be >= 1 and below watchdog_ms"
+            f"controller.keepalive_ms={c.keepalive_ms} must be in 1..watchdog_ms // 2"
         )
     # actuators
     channels: dict[int, str] = {}

@@ -84,6 +84,7 @@ def test_angles_out_of_range_rejected(tmp_path):
         ("max_hold_s = 60", "max_hold_s = 121"),  # firmware caps MAXHOLD at 120000 ms
         ("max_hold_s = 60", "max_hold_s = 0"),
         ("keepalive_ms = 500", "keepalive_ms = 2000"),  # must ping before the watchdog fires
+        ("keepalive_ms = 500", "keepalive_ms = 1001"),  # at most half the watchdog
         ("keepalive_ms = 500", "keepalive_ms = 0"),
         ("channel = 0", "channel = 8"),  # firmware has channels 0-7
     ],
@@ -98,8 +99,10 @@ def test_controller_limits_rejected(tmp_path, old, new):
 def test_controller_limits_accepted(tmp_path):
     text = _example_text().replace("watchdog_ms = 2000", "watchdog_ms = 10000")
     text = text.replace("max_hold_s = 60", "max_hold_s = 120")
+    text = text.replace("keepalive_ms = 500", "keepalive_ms = 5000")  # exactly half
     cfg = load(_write(tmp_path, text))
-    assert (cfg.controller.watchdog_ms, cfg.controller.max_hold_s) == (10000, 120)
+    c = cfg.controller
+    assert (c.watchdog_ms, c.max_hold_s, c.keepalive_ms) == (10000, 120, 5000)
 
 
 def test_round_minutes_loaded():

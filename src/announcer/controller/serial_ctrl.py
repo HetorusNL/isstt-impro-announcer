@@ -20,7 +20,7 @@ from typing import Any
 import serial
 
 from announcer.clock import Clock
-from announcer.config import Actuator
+from announcer.config import MAX_MAXHOLD_MS, MAX_WATCHDOG_MS, Actuator
 from announcer.controller.base import ControllerError
 
 log = logging.getLogger(__name__)
@@ -30,10 +30,17 @@ IO_TIMEOUT_S = 0.25  # pyserial read/write timeout: no blocking call can hang a 
 REPLY_TIMEOUT_S = 1.0
 REST_TIMEOUT_S = 5.0  # a flash erase stalls the MCU for a few seconds
 RECONNECT_S = 2.0
-MAX_DRAIN_LINES = 100
-# firmware limits (PROTOCOL.md); config.validate enforces them as well
-MAX_WATCHDOG_MS = 10_000
-MAX_MAXHOLD_MS = 120_000
+DRAIN_MAX_S = 1.0  # discarding boot output on open stops after this, even if lines keep coming
+READ_SIZE = 256  # bytes per readline: a newline-less stream cannot make one read unbounded
+MAX_LINE_BYTES = 1024  # firmware lines are short; a longer partial line is noise, dropped
+
+
+class FirmwareError(ControllerError):
+    """The board answered ERR <reason>."""
+
+    def __init__(self, cmd: str, reason: str) -> None:
+        super().__init__(f"{cmd}: {reason}")
+        self.reason = reason
 
 
 class SerialController:
@@ -114,22 +121,32 @@ class SerialController:
 
     async def tap(self, button: str) -> None:
         ch, act = self._lookup(button)
-        await self._command(f"ANGLE {ch} {act.press}")
-        try:
-            await self._clock.sleep(act.press_ms / 1000)
-        except BaseException:  # cancelled mid-press: do not leave the button pressed
-            try:
-                await self._command(f"RELEASE {ch}")
-            except Exception:
-                log.exception("releasing %s after a cancelled tap failed", button)
-            raise
+        await self._press(button, ch, act)
         await self._command(f"RELEASE {ch}")
         await self._clock.sleep(act.release_ms / 1000)
 
     async def hold(self, button: str) -> None:
         ch, act = self._lookup(button)
-        await self._command(f"ANGLE {ch} {act.press}")
-        await self._clock.sleep(act.press_ms / 1000)
+        await self._press(button, ch, act)
+
+    async def _press(self, button: str, ch: int, act: Actuator) -> None:
+        """ANGLE to the press angle, wait press_ms; on cancel or error, release (best effort).
+
+        A cancel during the ANGLE exchange still moves the servo (the exchange is shielded),
+        and the keep-alive keeps the firmware watchdog fed, so without this RELEASE the
+        button would stay pressed until MAXHOLD.
+        """
+        try:
+            await self._command(f"ANGLE {ch} {act.press}")
+            await self._clock.sleep(act.press_ms / 1000)
+        except FirmwareError:  # ANGLE refused: the servo did not move
+            raise
+        except BaseException:
+            try:
+                await self._command(f"RELEASE {ch}")
+            except Exception:
+                log.exception("releasing %s after a failed or cancelled press failed", button)
+            raise
 
     async def release(self, button: str) -> None:
         ch, _ = self._lookup(button)
@@ -157,8 +174,15 @@ class SerialController:
                 return
             async with self._lock:
                 await self._drop()
+                opening = asyncio.ensure_future(asyncio.to_thread(self._open))
                 try:
-                    self._port = await asyncio.to_thread(self._open)
+                    self._port = await asyncio.shield(opening)
+                except asyncio.CancelledError:
+                    # the thread cannot be stopped: wait for its port and close it
+                    with contextlib.suppress(Exception):
+                        port = await opening
+                        await asyncio.to_thread(port.close)
+                    raise
                 except (serial.SerialException, OSError) as e:
                     raise ControllerError(f"cannot open {self._port_name}: {e}") from e
             try:
@@ -183,9 +207,12 @@ class SerialController:
             if self._closing:  # close() ran while this thread was opening
                 raise ControllerError("controller closed")
             port.reset_input_buffer()
-            for _ in range(MAX_DRAIN_LINES):  # until one read timeout passes in silence
-                if not port.readline():
+            deadline = time.monotonic() + DRAIN_MAX_S
+            while time.monotonic() < deadline:  # until one read timeout passes in silence
+                if not port.readline(READ_SIZE):
                     break
+            if self._closing:  # ... or while it was draining
+                raise ControllerError("controller closed")
         except BaseException:
             port.close()
             raise
@@ -196,13 +223,20 @@ class SerialController:
         self._reconfigure = False  # an EVT BOOT from here on means: do it again
         await self._command(f"WATCHDOG {self._watchdog_ms}", require_connected=require_connected)
         await self._command(f"MAXHOLD {self._max_hold_ms}", require_connected=require_connected)
-        # a channel whose REST failed stays safe: the firmware refuses ANGLE without a rest
-        await self._send_rests(require_connected=require_connected)
+        # REST moves the channel to its rest angle (firmware moveTo), so every connect
+        # sequence and every reconfigure after EVT BOOT physically puts SPREKEN (and every
+        # other actuator) back at rest. The safety design depends on this: after any
+        # reconnect, nothing is left pressed.
+        await self._send_rests(require_connected=require_connected, fatal=True)
 
-    async def _send_rests(self, *, require_connected: bool = True) -> list[str]:
-        """REST for every actuator, one at a time; returns the ERR replies.
+    async def _send_rests(
+        self, *, require_connected: bool = True, fatal: bool = False
+    ) -> list[str]:
+        """REST for every actuator, one at a time; returns the tolerated ERR replies.
 
-        Raises only if the link is gone. ERR flash still sets the rest (RAM, this session).
+        ERR flash is tolerated: the firmware still sets the rest (in RAM, this session).
+        With fatal, any other ERR raises at once (it ends a connect attempt); without,
+        every REST is still sent and the other ERRs are returned too. A lost link raises.
         """
         failed: list[str] = []
         for name, act in list(self.actuators.items()):
@@ -212,10 +246,11 @@ class SerialController:
                     self._rest_timeout_s,
                     require_connected=require_connected,
                 )
-            except ControllerError as e:
-                if self._port is None:  # timeout or serial error: disconnected
+            except FirmwareError as e:
+                if fatal and e.reason != "flash":
                     raise
-                log.error("REST for %s failed: %s", name, e)
+                extra = " (rest kept in RAM for this session)" if e.reason == "flash" else ""
+                log.error("REST for %s failed: %s%s", name, e, extra)
                 failed.append(f"{name}: {e}")
         return failed
 
@@ -233,24 +268,30 @@ class SerialController:
             log.error("controller disconnected from %s", self._port_name)
 
     async def _keepalive_loop(self) -> None:
+        # started by connect() right before its own attempt: the first retry waits reconnect_s
+        last_attempt = time.monotonic()
         while not self._closing:
-            if not self.connected:
-                await asyncio.sleep(self._reconnect_s)
-                try:
-                    await self._setup()
-                except ControllerError as e:
-                    log.debug("reconnect failed: %s", e)
-                continue
             # real time, not the clock: the firmware watchdog runs in real time
             await asyncio.sleep(self._keepalive_s)
             if not self.connected:
+                if time.monotonic() - last_attempt >= self._reconnect_s:
+                    last_attempt = time.monotonic()
+                    try:
+                        await self._setup()
+                    except ControllerError as e:
+                        log.debug("reconnect failed: %s", e)
+                continue
+            if self._reconfigure:
+                log.warning("board reset: sending WATCHDOG, MAXHOLD and rests again")
+                try:
+                    await self._configure_board()
+                except ControllerError as e:  # as fatal as in a connect attempt: start over
+                    log.error("reconfigure after board reset failed: %s", e)
+                    async with self._lock:
+                        await self._drop()
                 continue
             try:
-                if self._reconfigure:
-                    log.warning("board reset: sending WATCHDOG, MAXHOLD and rests again")
-                    await self._configure_board()
-                else:
-                    await self._command("PING")
+                await self._command("PING")
             except ControllerError as e:
                 log.warning("keep-alive: %s", e)
 
@@ -287,7 +328,7 @@ class SerialController:
             await self._drop()
             raise ControllerError(f"{cmd}: timeout after {timeout:g} s, no reply")
         if reply.startswith("ERR"):
-            raise ControllerError(f"{cmd}: {reply[3:].strip() or 'ERR'}")
+            raise FirmwareError(cmd, reply[3:].strip() or "ERR")
         return reply
 
     def _exchange_blocking(self, port: Any, cmd: str, timeout: float) -> str | None:
@@ -295,11 +336,14 @@ class SerialController:
         port.write(f"{cmd}\n".encode())
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            chunk = port.readline()
+            chunk = port.readline(READ_SIZE)
             if not chunk:
                 continue
             self._buf += chunk
-            if not self._buf.endswith(b"\n"):  # a read timeout split the line
+            if not self._buf.endswith(b"\n"):  # a read timeout or READ_SIZE split the line
+                if len(self._buf) > MAX_LINE_BYTES:
+                    log.warning("dropping %d bytes of line noise", len(self._buf))
+                    self._buf = b""
                 continue
             line = self._buf.decode(errors="replace").strip()
             self._buf = b""

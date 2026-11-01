@@ -33,11 +33,15 @@ class FakePort:
         self.errors: dict[str, str] = {}  # command prefix -> ERR reason
         self.delays: dict[str, float] = {}  # command prefix -> reply delay (s)
         self.events_before_reply: list[str] = []  # emitted before the next reply
+        self.noise_before_reply = b""  # raw bytes (no newline) emitted before the next reply
+        self.open_delay = 0.0  # seconds an open takes
+        self.read_sizes: set[int] = set()
         self.rests: dict[int, int] = {}
 
     # factory
     def open(self, port: str, **kwargs) -> "FakePort":
         self.opens.append({"port": port, **kwargs})
+        time.sleep(self.open_delay)
         if self.fail_open:
             self.fail_open -= 1
             raise OSError("no such device")
@@ -54,11 +58,16 @@ class FakePort:
                 self._answer(line)
         return len(data)
 
-    def readline(self) -> bytes:
+    def readline(self, size: int) -> bytes:
         assert self.is_open
+        self.read_sizes.add(size)
         with self.lock:
             if self.out and self.out[0][0] <= time.monotonic():
-                return self.out.popleft()[1]
+                ready_at, data = self.out.popleft()
+                if len(data) > size:  # like pyserial: at most size bytes per call
+                    self.out.appendleft((ready_at, data[size:]))
+                    data = data[:size]
+                return data
         time.sleep(0.002)  # a read timeout with nothing received
         return b""
 
@@ -83,10 +92,15 @@ class FakePort:
         for ev in self.events_before_reply:
             self.emit(ev)
         self.events_before_reply = []
+        if self.noise_before_reply:
+            self.out.append((time.monotonic(), self.noise_before_reply))
+            self.noise_before_reply = b""
         delay = next((d for p, d in self.delays.items() if line.startswith(p)), 0.0)
         err = next((e for p, e in self.errors.items() if line.startswith(p)), None)
         tok = line.split()
         if err is not None:
+            if tok[0] == "REST" and err == "flash":  # kept in RAM for this session
+                self.rests[int(tok[1])] = int(tok[2])
             reply = f"ERR {err}"
         elif tok[0] == "PING":
             reply = "OK PONG"
@@ -202,6 +216,15 @@ async def test_keepalive_pings(port: FakePort) -> None:
     try:
         await wait_for(lambda: len(port.commands("PING")) >= 4)
         assert ctrl.connected
+    finally:
+        await ctrl.close()
+
+
+async def test_first_ping_does_not_wait_for_reconnect_interval(port: FakePort) -> None:
+    ctrl = make(port, keepalive_ms=20, reconnect_s=60)
+    await ctrl.connect()
+    try:
+        await wait_for(lambda: port.commands("PING")[1:], timeout=0.5)
     finally:
         await ctrl.close()
 
@@ -350,3 +373,98 @@ async def test_close_is_bounded_when_board_is_silent(port: FakePort) -> None:
     await ctrl.close()  # best effort: does not raise
     assert time.monotonic() - t0 < 0.5
     assert not port.is_open
+
+
+@pytest.mark.parametrize("action", ["tap", "hold"])
+async def test_cancel_during_press_exchange_releases(port: FakePort, action: str) -> None:
+    ctrl = make(port)
+    await ctrl.connect()
+    try:
+        port.delays["ANGLE"] = 0.05  # cancel lands while the ANGLE waits for its reply
+        task = asyncio.create_task(getattr(ctrl, action)("SPREKEN"))
+        await wait_for(lambda: port.commands("ANGLE"))
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert port.commands()[-2:] == ["ANGLE 3 50", "RELEASE 3"]
+    finally:
+        await ctrl.close()
+
+
+async def test_cancelled_command_does_not_take_next_reply(port: FakePort) -> None:
+    ctrl = make(port)
+    await ctrl.connect()
+    try:
+        port.delays["ANGLE"] = 0.05
+        task = asyncio.create_task(ctrl.set_angle("SC1", 70))
+        await wait_for(lambda: port.commands("ANGLE"))
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        port.errors["RELEASE"] = "no rest"
+        # the late OK belongs to the cancelled ANGLE; RELEASE must get its own ERR
+        with pytest.raises(ControllerError, match="no rest"):
+            await ctrl.release("SC1")
+        assert ctrl.connected
+    finally:
+        await ctrl.close()
+
+
+async def test_rest_err_flash_is_tolerated_on_connect(port: FakePort) -> None:
+    port.errors["REST 0"] = "flash"
+    ctrl = make(port)
+    await ctrl.connect()
+    try:
+        assert ctrl.connected
+        assert port.commands("REST") == ["REST 0 90", "REST 3 80"]
+        await ctrl.tap("SC1")  # the rest is kept in RAM for this session
+    finally:
+        await ctrl.close()
+
+
+async def test_rest_other_err_fails_connect(port: FakePort) -> None:
+    port.errors["REST 0"] = "channel"
+    ctrl = make(port, reconnect_s=60)
+    try:
+        with pytest.raises(ControllerError, match="channel"):
+            await ctrl.connect()
+        assert not ctrl.connected and not port.is_open
+    finally:
+        await ctrl.close()
+
+
+async def test_rest_other_err_on_reconfigure_disconnects(port: FakePort) -> None:
+    ctrl = make(port, keepalive_ms=20, reconnect_s=60)
+    await ctrl.connect()
+    try:
+        port.errors["REST 3"] = "channel"
+        port.push_event("EVT BOOT")
+        await wait_for(lambda: not ctrl.connected)
+        assert not port.is_open
+    finally:
+        await ctrl.close()
+
+
+async def test_cancel_during_open_closes_port(port: FakePort) -> None:
+    port.open_delay = 0.05
+    ctrl = make(port, reconnect_s=60)
+    task = asyncio.create_task(ctrl.connect())
+    await wait_for(lambda: port.opens)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not port.is_open  # the thread's port was awaited and closed
+    assert ctrl._port is None
+    await ctrl.close()
+
+
+async def test_reads_are_bounded(port: FakePort) -> None:
+    ctrl = make(port)
+    await ctrl.connect()
+    try:
+        assert port.read_sizes == {256}
+        port.noise_before_reply = b"x" * 10_000  # line noise without a newline
+        await ctrl.set_angle("SC1", 70)  # the reply after the noise is still found
+        assert len(ctrl._buf) < 2048
+    finally:
+        await ctrl.close()
