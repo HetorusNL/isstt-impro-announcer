@@ -18,6 +18,7 @@ from announcer.config import Config, ConfigError
 from announcer.config import Tts as TtsConfig
 from announcer.controller.base import Controller
 from announcer.controller.mock import MockController
+from announcer.controller.serial_ctrl import SerialController
 from announcer.engine import Synth
 from announcer.schedule.cupkit import CupkitSource
 from announcer.schedule.filesource import FileSource
@@ -90,10 +91,6 @@ def reset_sim_state(store: Path) -> None:
 def build_controller(args: argparse.Namespace, cfg: Config, clock: Clock) -> Controller:
     if args.mock:
         return MockController(clock, cfg.actuators)
-    try:
-        from announcer.controller.serial_ctrl import SerialController  # type: ignore[import-not-found]
-    except ImportError:
-        raise SystemExit("serial controller not available yet; use --mock") from None
     c = cfg.controller
     return SerialController(
         c.port, cfg.actuators, c.keepalive_ms, c.watchdog_ms, c.max_hold_s, clock

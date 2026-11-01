@@ -76,6 +76,32 @@ def test_angles_out_of_range_rejected(tmp_path):
         load(_write(tmp_path, text))
 
 
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("watchdog_ms = 2000", "watchdog_ms = 10001"),  # firmware caps WATCHDOG at 10000
+        ("watchdog_ms = 2000", "watchdog_ms = 0"),
+        ("max_hold_s = 60", "max_hold_s = 121"),  # firmware caps MAXHOLD at 120000 ms
+        ("max_hold_s = 60", "max_hold_s = 0"),
+        ("keepalive_ms = 500", "keepalive_ms = 2000"),  # must ping before the watchdog fires
+        ("keepalive_ms = 500", "keepalive_ms = 0"),
+        ("channel = 0", "channel = 8"),  # firmware has channels 0-7
+    ],
+)
+def test_controller_limits_rejected(tmp_path, old, new):
+    text = _example_text()
+    assert old in text
+    with pytest.raises(ConfigError):
+        load(_write(tmp_path, text.replace(old, new, 1)))
+
+
+def test_controller_limits_accepted(tmp_path):
+    text = _example_text().replace("watchdog_ms = 2000", "watchdog_ms = 10000")
+    text = text.replace("max_hold_s = 60", "max_hold_s = 120")
+    cfg = load(_write(tmp_path, text))
+    assert (cfg.controller.watchdog_ms, cfg.controller.max_hold_s) == (10000, 120)
+
+
 def test_round_minutes_loaded():
     cfg = load(EXAMPLE)
     assert cfg.schedule.round_minutes["Round 1"] == 15

@@ -1,7 +1,6 @@
 import asyncio
 import shutil
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -13,6 +12,7 @@ from announcer.audio.player import MockPlayer, SoundPlayer
 from announcer.clock import RealClock, SimClock
 from announcer.config import Actuator, Config
 from announcer.controller.mock import MockController
+from announcer.controller.serial_ctrl import SerialController
 from announcer.engine import HistoryEntry
 from announcer.gui import view
 from announcer.main import build_runtime, parse_args, reset_sim_state
@@ -105,12 +105,10 @@ def test_source_override_does_not_change_config(cfg_path: Path) -> None:
     assert rt.cfg.schedule.store == "state/schedule.json"
 
 
-def test_without_mock_fails_fast_if_serial_missing(
-    cfg_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setitem(sys.modules, "announcer.controller.serial_ctrl", None)
-    with pytest.raises(SystemExit, match="serial controller not available yet; use --mock"):
-        runtime(cfg_path)
+def test_without_mock_builds_serial_controller(cfg_path: Path) -> None:
+    rt = runtime(cfg_path)
+    assert isinstance(rt.ctrl, SerialController)
+    assert not rt.ctrl.connected  # the port is only opened by connect() at startup
 
 
 def test_bad_config_exits_with_message(tmp_path: Path) -> None:

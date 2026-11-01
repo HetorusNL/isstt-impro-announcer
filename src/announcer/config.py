@@ -16,6 +16,10 @@ REQUIRED_MESSAGES = ("match_start", "match_end")
 # sample values with the same types as planner.render_message, for a trial render
 SAMPLE_RENDER = {"time": "09:00", "count": 1, "fields": "Field 1", "halls": "SC1"}
 MAX_ANGLE = 180
+MAX_CHANNEL = 7
+# firmware limits (firmware/PROTOCOL.md)
+MAX_WATCHDOG_MS = 10_000
+MAX_HOLD_S = 120
 
 
 class ConfigError(Exception):
@@ -115,6 +119,16 @@ def _check_template(name: str, template: str) -> None:
 
 
 def validate(cfg: Config) -> None:
+    # controller
+    c = cfg.controller
+    if not 1 <= c.watchdog_ms <= MAX_WATCHDOG_MS:
+        raise ConfigError(f"controller.watchdog_ms={c.watchdog_ms} not in 1..{MAX_WATCHDOG_MS}")
+    if not 1 <= c.max_hold_s <= MAX_HOLD_S:
+        raise ConfigError(f"controller.max_hold_s={c.max_hold_s} not in 1..{MAX_HOLD_S}")
+    if not 1 <= c.keepalive_ms < c.watchdog_ms:
+        raise ConfigError(
+            f"controller.keepalive_ms={c.keepalive_ms} must be >= 1 and below watchdog_ms"
+        )
     # actuators
     channels: dict[int, str] = {}
     for name, act in cfg.actuators.items():
@@ -127,6 +141,8 @@ def validate(cfg: Config) -> None:
         for attr in ("press_ms", "release_ms"):
             if getattr(act, attr) < 0:
                 raise ConfigError(f"actuator {name!r}: {attr} must be >= 0")
+        if not isinstance(act.channel, int) or not 0 <= act.channel <= MAX_CHANNEL:
+            raise ConfigError(f"actuator {name!r}: channel={act.channel!r} not in 0..{MAX_CHANNEL}")
         if act.channel in channels:
             raise ConfigError(
                 f"actuators {channels[act.channel]!r} and {name!r} share channel {act.channel}"
