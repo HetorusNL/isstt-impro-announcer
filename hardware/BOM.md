@@ -6,12 +6,11 @@ Shipping takes 2-4 weeks, so order early.
 |-----|------|--------|
 | 8 | MG90S metal-gear micro servos | 4 needed (SC1, SC2, SC3, SPREKEN); 4 spare or for extra buttons |
 | 1 | 5 V, ≥ 4 A regulated wall adapter with barrel jack (closed unit, e.g. Mean Well GST25E05; no open-frame mains supply) | Powers the servos and the Nucleo (E5V). 4 servos move one at a time in normal use; worst case all 4 return to rest at once (~3–4 A peak, buffered by the 1000 µF cap). A closed adapter avoids exposed mains terminals at the venue. Budget more if running all 8 servos with simultaneous moves |
-| 1 | Screw-terminal breakout for the barrel jack | Clean power distribution to the servo rail |
+| 1 | 5.5/2.1 mm female DC jack to screw-terminal adapter | Feeds the servo rail and the Nucleo E5V/GND from the adapter (candidate adapter: TinyTronics XSG-0504000HEU, 5.0 V 4 A, 5.5/2.1 mm). Check the voltage under load stays within 4.75–5.25 V |
 | 8 | Servo extension leads, 30 cm | Reach from the controller to the servos on the desk |
-| 1 set | Dupont/JST wiring | Connect controller, servo rail and signal lines |
-| 1 | 1000 uF electrolytic capacitor | Across the servo rail to absorb current spikes |
-| 1 | Small powered speaker with 3.5 mm input, or PAM8403 amp board plus 40 mm 4 ohm driver | Plays the announcement next to the paging desk mic |
-| 1 | USB sound card | Keeps the laptop's own audio free for previews |
+| 1 set | Jumper wires (Dupont), perfboard, pin headers — **on hand** | Servo rail on perfboard: a 3-pin header per servo (GND / +5 V / signal), signal pins to the Nucleo header by jumper. Tape or hot-glue connections for transport |
+| 1 | 1000 uF electrolytic capacitor, ≥ 10 V (16 V preferred) — **on hand** | Across the servo rail (+5 V / GND, mind polarity) close to the servo headers, to absorb current spikes |
+| 1 | Earson ER-151 speaker (Tim's own; triangular, ~150×56×56 mm, 2× 1.5" drivers) on the laptop's 3.5 mm output — **on hand** | Plays the announcement at the paging desk mic. No USB sound card: previews also come out of this speaker, which is harmless because the desk mic is only live while Spreken is held. Battery lasts ~5 h, so power it from a separate USB wall charger (not the laptop) during the day; check for hum and for auto power-off in AUX mode |
 | 2 | 20x20 aluminium extrusion, 400 mm | Stiff backbone; the printed parts clip onto it |
 | 1 set | T-nuts and M3/M4 bolts | Mount the extrusion and printed parts |
 | 1 | EVA foam or rubber sheet | Clamp pads |
@@ -22,9 +21,6 @@ Shipping takes 2-4 weeks, so order early.
 |------|----------|------------|-------------------|
 | Servos | TBD | TBD | TBD |
 | Power supply and breakout | TBD | TBD | TBD |
-| Extension leads and wiring | TBD | TBD | TBD |
-| Capacitor | TBD | TBD | TBD |
-| Speaker / amp | TBD | TBD | TBD |
-| USB sound card | TBD | TBD | TBD |
+| Extension leads | TBD | TBD | TBD |
 | Extrusion, T-nuts, bolts | TBD | TBD | TBD |
 | EVA foam / rubber sheet | TBD | TBD | TBD |
