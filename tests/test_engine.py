@@ -1,0 +1,497 @@
+import asyncio
+import hashlib
+import json
+import logging
+from collections.abc import Callable
+from datetime import datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import numpy as np
+import pytest
+import soundfile as sf
+
+from announcer.audio.player import MockPlayer
+from announcer.clock import SimClock
+from announcer.config import Actuator, Config
+from announcer.controller.mock import MockController
+from announcer.engine import Engine
+from announcer.model import Match
+from announcer.schedule import store
+from announcer.schedule.filesource import FileSource
+from announcer.schedule.source import SourceError
+
+TZ = "Europe/Amsterdam"
+SPEED = 600.0
+START_MSG = "Referees, you may start the matches."
+END_MSG = "Referees, you may end the matches."
+
+
+def at(h: int, m: int, s: int = 0) -> datetime:
+    return datetime(2026, 12, 18, h, m, s, tzinfo=ZoneInfo(TZ))
+
+
+def match(start: datetime, hall: str = "SC1", minutes: int = 20) -> Match:
+    return Match(start, hall, "Field 1", "A", "B", "Ref", "Round 1", minutes)
+
+
+def make_cfg(poll_seconds: int = 60) -> Config:
+    cfg = Config()
+    cfg.actuators = {
+        "SC1": Actuator(channel=0, rest=10, press=40),
+        "SC2": Actuator(channel=1, rest=10, press=40),
+        "SPREKEN": Actuator(channel=2, rest=10, press=40),
+    }
+    cfg.announce.halls = ["SC1", "SC2"]
+    cfg.announce.chime_seconds = 3.0
+    cfg.announce.tail_seconds = 0.5
+    cfg.schedule.poll_seconds = poll_seconds
+    return cfg
+
+
+class FakeTts:
+    """Writes a short silent wav per text."""
+
+    def __init__(self, cache: Path, seconds: float = 1.0) -> None:
+        self.cache = cache
+        self.seconds = seconds
+        self.texts: list[str] = []
+        self.fail = False
+
+    async def synth(self, text: str) -> Path:
+        if self.fail:
+            raise RuntimeError("tts broke")
+        self.texts.append(text)
+        self.cache.mkdir(parents=True, exist_ok=True)
+        path = self.cache / f"{hashlib.sha256(text.encode()).hexdigest()}.wav"
+        if not path.exists():
+            sr = 16000
+            sf.write(path, np.zeros(int(sr * self.seconds), dtype="int16"), sr)
+        return path
+
+
+class SwitchSource:
+    def __init__(self, matches: list[Match]) -> None:
+        self.matches = matches
+        self.error: str | None = None
+        self.calls = 0
+
+    async def fetch(self) -> list[Match]:
+        self.calls += 1
+        if self.error is not None:
+            raise SourceError(self.error)
+        return list(self.matches)
+
+
+class Rig:
+    def __init__(self, tmp_path: Path, start: datetime, cfg: Config, speed: float) -> None:
+        self.tmp_path = tmp_path
+        self.cfg = cfg
+        self.clock = SimClock(start, speed)
+        self.ctrl = MockController(self.clock, cfg.actuators)
+        self.player = MockPlayer(self.clock)
+        self.tts = FakeTts(tmp_path / "tts")
+        self.schedule_file = tmp_path / "schedule.json"
+        self.store_path = tmp_path / "state" / "schedule.json"
+
+    def write(self, matches: list[Match]) -> None:
+        store.save(matches, self.schedule_file)
+
+    def engine(self, source=None) -> Engine:
+        if source is None:
+            source = FileSource(self.schedule_file, TZ)
+        return Engine(
+            self.cfg, source, self.store_path, self.ctrl, self.player, self.tts, self.clock
+        )
+
+    def kinds(self) -> list[tuple[str, str]]:
+        return [(k, b) for _, k, b in self.ctrl.events]
+
+    def times(self, kind: str, button: str = "SPREKEN") -> list[datetime]:
+        return [t for t, k, b in self.ctrl.events if k == kind and b == button]
+
+
+def make_rig(tmp_path, start, cfg=None, speed=SPEED) -> Rig:
+    return Rig(tmp_path, start, cfg or make_cfg(), speed)
+
+
+async def until(cond: Callable[[], bool], timeout: float = 3.0) -> None:
+    """Wait (real time) until cond() holds."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while not cond():
+        if loop.time() > deadline:
+            raise AssertionError("condition not met in time")
+        await asyncio.sleep(0.001)
+
+
+async def until_clock(clock: SimClock, t: datetime) -> None:
+    await until(lambda: clock.now() >= t)
+
+
+def statuses(engine: Engine) -> list[tuple[tuple[str, str], str]]:
+    return [(h.key, h.status) for h in engine.history]
+
+
+def key(kind: str, due: datetime) -> tuple[str, str]:
+    return (kind, due.isoformat())
+
+
+def other_tasks() -> list[asyncio.Task]:
+    return [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+
+
+async def test_plays_start_and_end_on_time(tmp_path):
+    # speed 100: at 600 each asyncio sleep overshoots ~0.4 s of clock time, too coarse for +-1 s
+    rig = make_rig(tmp_path, at(8, 59, 50), speed=100.0)
+    rig.write([match(at(9, 0), minutes=1)])
+    engine = rig.engine()
+    await engine.start()
+    assert len(engine.upcoming) == 2
+    try:
+        await until(lambda: len(engine.history) == 2)
+    finally:
+        await engine.stop()
+    assert statuses(engine) == [
+        (key("match_start", at(9, 0)), "played"),
+        (key("match_end", at(9, 1)), "played"),
+    ]
+    holds = rig.times("hold")
+    assert len(holds) == 2
+    for hold, due in zip(holds, (at(9, 0), at(9, 1)), strict=True):
+        assert abs((hold - (due - timedelta(seconds=3.0))).total_seconds()) <= 1.0
+    assert rig.tts.texts == [START_MSG, END_MSG]
+    assert len(rig.player.played) == 2
+    assert engine.upcoming == []
+
+
+async def test_pause_skips_when_late(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    engine.pause()
+    await engine.start()
+    try:
+        await until_clock(rig.clock, at(9, 1, 5))
+        await until(lambda: engine.history != [])
+        assert statuses(engine) == [(key("match_start", at(9, 0)), "skipped")]
+        engine.resume()
+        t = rig.clock.now()
+        await until_clock(rig.clock, t + timedelta(seconds=5))
+    finally:
+        await engine.stop()
+    assert "hold" not in [k for k, _ in rig.kinds()]
+    assert rig.player.played == []
+    assert len(engine.history) == 1
+
+
+async def test_play_now_plays_skipped(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    engine.pause()
+    await engine.start()
+    try:
+        k = key("match_start", at(9, 0))
+        await until(lambda: statuses(engine) == [(k, "skipped")], timeout=5)
+        await engine.play_now(k)  # runs even while paused
+        assert statuses(engine) == [(k, "skipped"), (k, "played")]
+        assert rig.tts.texts == [START_MSG]
+        assert rig.kinds() == [
+            ("tap", "SC1"),
+            ("tap", "SC2"),
+            ("hold", "SPREKEN"),
+            ("release", "SPREKEN"),
+        ]
+        with pytest.raises(KeyError):
+            await engine.play_now(k)  # no longer skipped
+    finally:
+        await engine.stop()
+
+
+async def test_play_now_failure_is_recorded(tmp_path):
+    rig = make_rig(tmp_path, at(10, 0))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        k = key("match_start", at(9, 0))
+        rig.ctrl.fail_on = {"hold"}
+        await engine.play_now(k)
+    finally:
+        await engine.stop()
+    entry = engine.history[-1]
+    assert (entry.key, entry.status) == (k, "failed")
+    assert "mock failure on hold" in entry.detail
+
+
+async def test_replan_does_not_replay_played(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50), make_cfg(poll_seconds=10))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: len(engine.history) == 1)
+        rig.write([match(at(9, 0)), match(at(9, 1), hall="SC2")])
+        await until(lambda: len(engine.history) == 2, timeout=5)
+        t = rig.clock.now()
+        await until_clock(rig.clock, t + timedelta(seconds=20))  # a few more polls
+    finally:
+        await engine.stop()
+    assert statuses(engine) == [
+        (key("match_start", at(9, 0)), "played"),
+        (key("match_start", at(9, 1)), "played"),
+    ]
+    assert len(rig.times("hold")) == 2
+    assert engine.matches_count == 2
+    assert rig.store_path.exists()
+
+
+async def test_partly_handled_session_does_not_replay_handled_part(tmp_path):
+    # 09:00 start played; a new match ends at 09:00:20 -> would merge with it
+    rig = make_rig(tmp_path, at(8, 59, 50), make_cfg(poll_seconds=10))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    end_key = key("match_end", at(9, 0, 20))
+    try:
+        await until(lambda: len(engine.history) == 1)
+        early = Match(at(8, 40, 20), "SC2", "Field 2", "C", "D", "Ref", "Round 1", 20)
+        rig.write([match(at(9, 0)), early])
+        await until(lambda: end_key in [h.key for h in engine.history], timeout=5)
+    finally:
+        await engine.stop()
+    assert (end_key, "played") in statuses(engine)
+    assert (key("match_start", at(8, 40, 20)), "skipped") in statuses(engine)
+    assert rig.tts.texts == [START_MSG, END_MSG]  # the handled start is not replayed
+    assert len(rig.times("hold")) == 2
+
+
+async def test_restart_does_not_replay_handled(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: len(engine.history) == 1)
+    finally:
+        await engine.stop()
+    handled = json.loads((tmp_path / "state" / "handled.json").read_text())
+    assert ["match_start", at(9, 0).isoformat()] in handled
+    # restart 20 s after due (inside the late threshold): no replay, not missed
+    rig2 = make_rig(tmp_path, at(9, 0, 20))
+    engine2 = rig2.engine()
+    await engine2.start()
+    try:
+        t = rig2.clock.now()
+        await until_clock(rig2.clock, t + timedelta(seconds=10))
+    finally:
+        await engine2.stop()
+    assert engine2.history == []
+    assert rig2.kinds() == [("release_all", "")]
+    assert [s.announcements[0].kind for s in engine2.upcoming] == ["match_end"]
+
+
+async def test_startup_marks_past_as_missed(tmp_path):
+    rig = make_rig(tmp_path, at(10, 0))
+    rig.write([match(at(9, 0)), match(at(9, 59, 30))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        assert statuses(engine) == [
+            (key("match_start", at(9, 0)), "missed"),
+            (key("match_end", at(9, 20)), "missed"),
+        ]
+        await until(lambda: len(engine.history) == 3)  # 09:59:30 is only 30 s late: plays
+    finally:
+        await engine.stop()
+    assert statuses(engine)[2] == (key("match_start", at(9, 59, 30)), "played")
+    assert rig.tts.texts == [START_MSG]
+    handled = json.loads((tmp_path / "state" / "handled.json").read_text())
+    assert ["match_end", at(9, 20).isoformat()] in handled
+
+
+async def test_startup_uses_store_when_source_fails(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    store.save([match(at(9, 0))], rig.store_path)
+    source = SwitchSource([])
+    source.error = "offline"
+    engine = rig.engine(source)
+    await engine.start()
+    try:
+        assert engine.matches_count == 1
+        assert len(engine.upcoming) == 2
+        assert engine.source_error == "offline"
+        assert engine.source_ok_at is None
+    finally:
+        await engine.stop()
+
+
+async def test_source_error_keeps_schedule(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0), make_cfg(poll_seconds=5))
+    source = SwitchSource([match(at(9, 0)), match(at(9, 30))])
+    engine = rig.engine(source)
+    await engine.start()
+    try:
+        assert engine.source_error is None
+        assert engine.source_ok_at is not None
+        ok_at = engine.source_ok_at
+        before = list(engine.upcoming)
+        source.error = "site down"
+        calls = source.calls
+        await until(lambda: source.calls > calls and engine.source_error is not None)
+        assert engine.source_error == "site down"
+        assert engine.upcoming == before
+        assert engine.matches_count == 2
+        assert engine.source_ok_at == ok_at
+        source.error = None
+        await until(lambda: engine.source_error is None)
+    finally:
+        await engine.stop()
+
+
+async def test_manual_waits_for_running_session(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: rig.times("hold") != [])
+        await engine.manual_text(["SC1"], "Hello there")
+        await until(lambda: len(engine.history) == 2)
+    finally:
+        await engine.stop()
+    assert [h.status for h in engine.history] == ["played", "played"]
+    assert engine.history[1].key[0] == "manual_text"
+    first_release = rig.kinds().index(("release", "SPREKEN"))
+    assert rig.kinds()[first_release + 1 :] == [
+        ("tap", "SC1"),
+        ("hold", "SPREKEN"),
+        ("release", "SPREKEN"),
+        ("release_all", ""),
+    ]
+    assert rig.tts.texts == [START_MSG, "Hello there"]
+
+
+async def test_manual_waits_while_paused(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    engine.pause()
+    await engine.start()
+    try:
+        await engine.manual_text(["SC2"], "Lunch is ready")
+        t = rig.clock.now()
+        await until_clock(rig.clock, t + timedelta(seconds=120))  # longer than late threshold
+        assert engine.history == []
+        assert rig.ctrl.events == []
+        engine.resume()
+        await until(lambda: len(engine.history) == 1)
+    finally:
+        await engine.stop()
+    assert engine.history[0].status == "played"
+    assert rig.kinds()[:3] == [("tap", "SC2"), ("hold", "SPREKEN"), ("release", "SPREKEN")]
+
+
+async def test_failure_marks_failed_and_engine_continues(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0), minutes=1)])
+    engine = rig.engine()
+    rig.tts.fail = True
+    await engine.start()
+    try:
+        await until(lambda: len(engine.history) == 1)
+        rig.tts.fail = False
+        await until(lambda: len(engine.history) == 2)
+    finally:
+        await engine.stop()
+    first, second = engine.history
+    assert (first.status, first.detail) == ("failed", "tts broke")
+    assert second.status == "played"
+
+
+async def test_talk_runs_while_paused_and_holds_the_lock(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    engine.pause()
+    await engine.start()
+    try:
+        await engine.talk_start(["SC1"])
+        assert engine.talking
+        assert rig.kinds() == [("tap", "SC1"), ("hold", "SPREKEN")]
+        engine.resume()
+        await engine.manual_text(["SC2"], "Waiting")
+        t = rig.clock.now()
+        await until_clock(rig.clock, t + timedelta(seconds=5))
+        assert engine.history == []  # manual waits for the talk
+        await engine.talk_stop()
+        assert not engine.talking
+        await until(lambda: len(engine.history) == 1)
+    finally:
+        await engine.stop()
+    assert rig.kinds()[:5] == [
+        ("tap", "SC1"),
+        ("hold", "SPREKEN"),
+        ("release", "SPREKEN"),
+        ("tap", "SC2"),
+        ("hold", "SPREKEN"),
+    ]
+
+
+async def test_reload_config_reconfigures_and_replans(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        new = make_cfg()
+        new.announce.lead_seconds = 10.0
+        new.actuators["SC1"] = Actuator(channel=0, rest=20, press=50)
+        await engine.reload_config(new)
+        assert engine.cfg is new
+        assert rig.ctrl.actuators["SC1"].rest == 20
+        assert engine.upcoming[0].start_at == at(9, 0) - timedelta(seconds=10)
+    finally:
+        await engine.stop()
+
+
+async def test_stop_releases_all(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    await until(lambda: rig.times("hold") != [])
+    await engine.stop()
+    assert rig.kinds()[-2:] == [("release", "SPREKEN"), ("release_all", "")]
+    assert other_tasks() == []
+
+
+async def test_stop_releases_all_during_talk(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    await engine.talk_start(["SC1"])
+    await engine.stop()
+    assert rig.kinds()[-2:] == [("release", "SPREKEN"), ("release_all", "")]
+    assert other_tasks() == []
+
+
+async def test_stop_when_session_ends_with_error_after_cancel(tmp_path, caplog):
+    # player fails, and stop() cancels while the error-path release is still running:
+    # the session task then ends with the RuntimeError, not CancelledError
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    rig.player.fail = True
+    rig.ctrl.release_delay_s = 30.0
+    await engine.start()
+    await until(lambda: rig.times("hold") != [])
+    await until_clock(rig.clock, rig.times("hold")[0] + timedelta(seconds=4))
+    assert rig.times("release") == []  # release in progress
+    with caplog.at_level(logging.WARNING, logger="announcer.engine"):
+        await engine.stop()
+    assert any("mock playback failure" in r.getMessage() for r in caplog.records)
+    assert rig.kinds()[-2:] == [("release", "SPREKEN"), ("release_all", "")]
+    assert other_tasks() == []

@@ -128,7 +128,11 @@ async def _deselect(ctrl: Controller, halls: Sequence[str], best_effort: bool = 
 async def talk_session(
     ctrl: Controller, clock: Clock, cfg: Config, halls: Sequence[str]
 ) -> AsyncIterator[None]:
-    """Zones on and SPREKEN held while inside; released on exit or after max_hold_s."""
+    """Zones on and SPREKEN held while inside; released on exit or after max_hold_s.
+
+    With deselect_zones_after, the selected zones are toggled off again after a
+    successful release on exit (also when the watchdog released), not on a cancel.
+    """
     released = False
     lock = asyncio.Lock()
 
@@ -152,11 +156,32 @@ async def talk_session(
             await asyncio.gather(wd, return_exceptions=True)
         await release_once()  # no-op if the watchdog already released
 
+    selected: list[str] = []  # halls whose tap completed
+    outcome = "ok"  # "ok" | "error" | "abort" (cancelled or other BaseException)
     try:
         for hall in halls:
-            await ctrl.tap(hall)
+            try:
+                await ctrl.tap(hall)
+            except Exception:
+                log.warning("tap of %s failed: its zone state is unknown, not deselecting it", hall)
+                raise
+            selected.append(hall)
         wd = asyncio.create_task(watchdog(), name="talk-watchdog")
         await ctrl.hold(SPREKEN)
         yield
+    except Exception:
+        outcome = "error"
+        raise
+    except BaseException:
+        outcome = "abort"
+        raise
     finally:
-        await _uninterruptible(finish())
+        await _uninterruptible(finish())  # raises if the release failed: no deselect then
+        if cfg.announce.deselect_zones_after:  # same rule as run_session step 6
+            if outcome == "ok":
+                await _deselect(ctrl, selected)
+            elif outcome == "error":
+                try:
+                    await _deselect(ctrl, selected, best_effort=True)
+                except asyncio.CancelledError:
+                    pass  # cancelled while deselecting; the original error still wins

@@ -296,3 +296,98 @@ async def test_talk_session_auto_releases_after_max_hold(caplog):
     # the exit does not repeat the watchdog's release
     assert sum(1 for _, k, _ in ctrl.events if k == "release") == 1
     assert any(r.levelno == logging.WARNING for r in caplog.records)
+
+
+async def test_talk_session_deselects_after_release_when_enabled():
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, _ = setup(cfg)
+    async with talk_session(ctrl, clock, cfg, HALLS):
+        pass
+    assert [(k, b) for _, k, b in ctrl.events] == [
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+        ("hold", "SPREKEN"),
+        ("release", "SPREKEN"),
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+    ]
+
+
+async def test_talk_session_no_deselect_when_disabled():
+    cfg = make_cfg()
+    clock, ctrl, _ = setup(cfg)
+    async with talk_session(ctrl, clock, cfg, HALLS):
+        pass
+    assert sum(1 for _, k, _ in ctrl.events if k == "tap") == 2
+
+
+async def test_talk_session_no_deselect_on_cancel():
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, _ = setup(cfg)
+
+    async def talk() -> None:
+        async with talk_session(ctrl, clock, cfg, HALLS):
+            await asyncio.Event().wait()
+
+    task = asyncio.create_task(talk())
+    while not any(k == "hold" for _, k, _ in ctrl.events):
+        await asyncio.sleep(0.001)
+    await asyncio.sleep(1.0 / SPEED)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert ctrl.events[-1][1:] == ("release", "SPREKEN")
+    assert sum(1 for _, k, _ in ctrl.events if k == "tap") == 2
+
+
+async def test_talk_session_deselects_after_watchdog_release():
+    cfg = make_cfg(deselect_zones_after=True)
+    cfg.controller.max_hold_s = 10
+    clock, ctrl, _ = setup(cfg, speed=1000.0)
+    async with talk_session(ctrl, clock, cfg, HALLS):
+        while not any(k == "release" for _, k, _ in ctrl.events):
+            await clock.sleep(1.0)
+    assert [(k, b) for _, k, b in ctrl.events][2:] == [
+        ("hold", "SPREKEN"),
+        ("release", "SPREKEN"),
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+    ]
+
+
+async def test_talk_session_deselect_on_body_error_keeps_error():
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, _ = setup(cfg)
+    with pytest.raises(ValueError):
+        async with talk_session(ctrl, clock, cfg, HALLS):
+            raise ValueError("boom")
+    assert [(k, b) for _, k, b in ctrl.events][2:] == [
+        ("hold", "SPREKEN"),
+        ("release", "SPREKEN"),
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+    ]
+
+
+async def test_talk_session_deselects_only_selected_halls():
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, _ = setup(cfg)
+    ctrl.fail_on = {"tap:SC2"}
+    with pytest.raises(ControllerError):
+        async with talk_session(ctrl, clock, cfg, HALLS):
+            pass
+    assert [(k, b) for _, k, b in ctrl.events] == [
+        ("tap", "SC1"),
+        ("release", "SPREKEN"),
+        ("tap", "SC1"),
+    ]
+
+
+async def test_talk_session_no_deselect_when_release_fails():
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, _ = setup(cfg)
+    ctrl.fail_on = {"release", "release_all"}
+    with pytest.raises(ControllerError):
+        async with talk_session(ctrl, clock, cfg, HALLS):
+            pass
+    assert sum(1 for _, k, _ in ctrl.events if k == "tap") == 2
