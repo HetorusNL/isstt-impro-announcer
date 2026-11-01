@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .superpowers/
 config.toml
+secrets.toml
 state/
 cache/
 voices/
