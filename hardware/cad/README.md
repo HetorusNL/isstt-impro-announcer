@@ -55,9 +55,9 @@ That leaves about 490 mm spare. These lengths change when the desk is measured: 
 
 ## Assembly
 
-**The T-nuts are slide-in: they only enter from a profile end.** Insert every nut you need **before** fitting corner brackets or end caps. If you miss one, the joint has to come apart.
+**The T-nuts are slide-in: they only enter from a profile end.** Insert every nut you need, M5 and M4, **before** fitting corner brackets or end caps. If you miss one, the joint has to come apart.
 
-Count of slide-in nuts, with the default four modules:
+Count of M5 slide-in nuts, with the default four modules:
 
 | Where | Slot | Nuts |
 |---|---|---|
@@ -70,7 +70,13 @@ Count of slide-in nuts, with the default four modules:
 | Speaker clamp | Pockets | 2 |
 | **Total** | | **18 of the 20 ordered** |
 
-The corner brackets bring their own hardware, which is not in this count. If its nuts are slide-in, they go in before the end caps too, and in the rail's bottom slot they go in before the tensioner nut.
+The corner brackets bring their own hardware, which is not in this count: M4x8 bolts and M4 slide-in nuts, 2 of each per bracket, so **8 M4 nuts on top of the 18 M5**. One nut of each bracket goes in the rail's bottom slot and the other in a post's side slot. Insertion order per slot:
+
+| Slot | Enter from | Order |
+|---|---|---|
+| Rail bottom, from each end | That rail end | Inner bracket M4, then outer bracket M4, then the tensioner M5 last, so it is outermost |
+| Post inner face (the jaw side) | Post bottom | Bracket M4 first, so it is nearest the rail, then the 2 jaw M5 |
+| Post outer face | Post bottom | Bracket M4 only |
 
 Use M5x10 for every printed part, including the tensioner. M5x8 leaves too little thread in the T-nut there.
 
@@ -84,13 +90,13 @@ Cut these pads from the sheet, slightly oversize so they press in:
 
 The side pads and tip dots stay in by the press fit. The under-lip pad hangs upside down while the frame is lowered: a dab of removable tack on the pad-to-jaw side only is fine. Never put anything on the side that faces the desk.
 
-1. Cut the rail and posts, then fit the nuts above, plus any corner bracket nuts.
-2. Join each post's top end to the rail's bottom face with 2 corner brackets, one on each side of the post. Tighten the bolts into the post. Leave the bolts into the rail loose, so the posts slide along the rail.
+1. Cut the rail and posts, then fit the nuts above, including the 8 M4 bracket nuts.
+2. Join each post's top end to the rail's bottom face with 2 corner brackets, one on each side of the post, with the M4x8 bolts. Tighten the bolts into the post. Leave the bolts into the rail loose, so the posts slide along the rail. The bracket's centring lips sit in the slot, so a loose bracket still slides along the rail.
 3. Press the end caps into the rail ends and post bottoms.
 4. Bolt a jaw to each post's inner face with 2 M5x10, key in the slot, then push in the pads. No adhesive. The pad covers the bolt heads, so take it out to adjust the jaw.
 5. Tensioner, one per side: drill out the skin in the shoulder hole. Slide a T-nut into the block's pocket. Put the stop collar on an M5x10 under its head, and thread the bolt through the shoulder into the nut. Put the pad's stub in the socket. Bolt the block to the rail's bottom slot with an M5x10, key in the slot, with a key's long arm up through the head slot. Keep it loose for now.
 6. Set the squeeze, without the modules. See "Setting the squeeze".
-7. Module: trim a stock single horn to `horn_stub` (7.5 mm from the axis). Drop the plunger into the guide from above, with the dot in its tip. Fit the servo from the back with the ears on the back face and the servo's own screws. Fit the horn and the cam with the horn screw. If that screw is too short, use M2x8.
+7. Module: trim a stock single horn to `horn_stub` (7.5 mm from the axis). Drop the plunger into the guide from above, with the dot in its tip. Fit the servo from the back with the ears on the back face and the servo's own screws. Fit the horn and the cam with the horn screw. If that screw is too short with the cam fitted, use M2x8: check on one servo first.
 8. Carriage on rail: M5x10 into a T-nut, key in the slot. Bracket on carriage: M5x10 through the slot into a T-nut in the pocket. The slot also gives a hex key access to the rail bolt, so a module can slide along the rail without taking it apart.
 9. Slide each module over its button. With the eccentric pointing up, which is the cam's clear position, adjust the height so that the plunger rests on the cap with about 1 mm gap to the cam. Do not set this at servo angle 90: see "Cam calibration".
 
@@ -110,12 +116,12 @@ The clamping force comes from compressing the side pads by `pad_squeeze`, **0.8 
 
 These follow the measured `case_w`, and `frame_assembly.scad` echoes them.
 
-1. Lower the frame over the desk with the lips resting on the rim. The bolts into the rail stay loose, on all 4 corner brackets.
+1. Lower the frame over the desk with the lips resting on the rim. The bolts into the rail stay loose, on all 4 corner brackets. The bracket's centring lips sit in the slot: a loose bracket still slides along the rail, which steps 3 and 5 rely on.
 2. Back off each push bolt by at least one full turn from the collar, and push the pad fully into its block.
 3. Bring each post inward by hand until its pad just touches the case wall: the post stops sliding freely. Do not press into the foam.
 4. Slide each block along the rail until its pad touches the post, without moving the post. Tighten the block's rail bolt with the long arm of a 3 mm hex key, up through the head slot. The handle swings below the block.
 5. Turn the push bolts in with the same key, from outside, along the rail. Take turns, a quarter turn per side, until each head seats on its collar and stops. From contact that is one turn, 0.8 mm. If you backed off further, the first turns do nothing, and the result is the same. A loose post tilts, because the bolt pushes above the pad, so keep the posts upright.
-6. Lock the corner bracket bolts into the rail. Reach the outer bracket's bolts with the key's short arm, from below, through the gap above the block's arm. The long arm then swings out to the front or back.
+6. Lock the corner bracket bolts into the rail, with the key that fits the bracket bolts: they are M4x8, and the size is unconfirmed, probably 2.5 mm if button head and 3 mm if socket head. Reach the outer bracket's bolts with the key's short arm, from below, through the gap above the block's arm, with the long arm swinging out to the front or back. The CAD draws the bracket as a cube, so the real access may instead be from the side or through the window in the sloped face.
 7. Check with the gauge at the front and back edge of each post. Hold it by the bar, flat face against the case wall, and push a blade gently up from below, between the case wall and the 5 mm of post that sticks out below the jaw. Turn it around for the other side.
    - **The GO blade must fit.** If it does not, the jaw plastic is too close: loosen the brackets and start again from step 2.
    - **The NO blade must not fit.** If it does, the pad is not compressed enough: start again from step 2.
@@ -130,7 +136,7 @@ The block only pushes, and the collar touches only the block and the bolt, so th
 
 Fit the cam with the eccentric horizontal at servo angle 90 (the groove on the cam's face marks the eccentric). **Fit all modules with the eccentric on the same side**: neighbouring cams then never swing towards each other. Then calibrate with the GUI on the real button. Expect rest at about 135 and press at about 65; the numbers mirror depending on which side the eccentric points.
 
-**Before the first connect with modules on the desk, set `rest` to about 135 in `config.toml`, or calibrate with the plunger removed.** At rest 90 the cam holds the plunger about 1.5 mm into the button's travel. The host sends the rest angle on every connect, and the failsafes go to it, so a wrong rest can keep a button pressed. The angles in `config.example.toml` (rest 90, press 60) are placeholders and do not suit the cam.
+**Before the first connect with modules on the desk, set `rest` to about 135 and `press` to a safe angle close to it, for example 120, in `config.toml`, and keep the plungers out until one connect with that rest has happened.** The firmware also drives the servos to the rest in its flash at power-on, before the host sends any config (README in the repo root, "Last bench step"). At rest 90 the cam holds the plunger about 1.5 mm into the button's travel. The host sends the rest angle on every connect, and the failsafes go to it, so a wrong rest can keep a button pressed. The angles in `config.example.toml` (rest 90, press 60) are placeholders and do not suit the cam.
 
 **Stop at the angle where the button just bottoms out.** Going further only makes the servo push against the stop and draw current. The servo can push about 50 N at the press angle, which is more than the pads hold down, so overdriving the press angle lifts the frame.
 
@@ -199,7 +205,7 @@ If a measured `pitch_y` or `alarm_xy` trips the assert, the clearance is `pitch_
 
 ## Speaker holder
 
-The ER-151 slides into the cradle from the open side, then a strap holds it. The strap goes through the slots in the beam and around the prism outside the driver area.
+The ER-151 slides into the cradle from the open side, then a strap holds it. The strap goes through the slots in the beam and around the prism outside the driver area. Any velcro cable tie or elastic strap that fits works: the slots are 3 x 18.8 mm.
 
 - The driver face points at the mic head, at `mic_dist` (default 40 mm, spec 30 to 50 mm).
 - `mic_offset` is 0 for the mic centred between the drivers, or 27.5 for the mic in line with one driver.
@@ -225,7 +231,7 @@ The cap landing on the panel is the hard stop, and it represents the button bein
 - [ ] Measure the desk and replace every `ESTIMATE` in `params.scad` that matters for fit. Reprint.
 - [ ] Check T-nut and servo fits on one printed carriage and bracket before printing all four.
 - [ ] Render `frame_assembly.scad` before reprinting anything, so the safety and hold-down asserts run.
-- [ ] **Hex key:** when the corner brackets arrive, fit one real bracket and try a 3 mm L-key on its rail bolts with a printed block in place, before printing all blocks. The CAD draws the bracket as a cube, so the 2.8 mm clearance is an estimate.
+- [ ] **Hex key:** when the corner brackets arrive, fit one real bracket and try the key that fits the bracket bolts on its rail bolt, with a printed block in place, before printing all blocks. The real access may be from the side or through the window in the sloped face. The CAD draws the bracket as a cube, so the 2.8 mm `bracket_key_clearance` is an estimate.
 - [ ] **Squeeze:** set and check it as in "Setting the squeeze". Jaw plastic never touches the case.
 - [ ] **Case wall:** confirm the case side wall is flat and vertical where the pads sit.
 - [ ] **Stiffness:** on the replica, hold SPREKEN with the servo at its press angle for 60 s. The paper strip stays trapped the whole time, and deflection measured at the rail or module is below 0.5 mm (feeler gauge or dial).

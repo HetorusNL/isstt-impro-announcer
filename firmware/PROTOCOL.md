@@ -45,13 +45,14 @@ A channel with no stored rest is never attached at boot and never driven by any 
 
 ## EEPROM
 
-STM32 EEPROM emulation uses flash. Layout: byte 0 magic `0xA1`, bytes 1-8 rest angle per channel
-(`0xFF` = none). The buffered API (`eeprom_buffer_fill`/`eeprom_buffer_flush`) is used and a flush happens
+STM32 EEPROM emulation uses flash. Layout: byte 0 magic `0xB8` (`0xA1 ^ NUM_CH ^ (PIN_TABLE_VERSION * 17)`,
+so it includes the layout version and a reflash with a different pin table ignores old rests), bytes 1-8
+rest angle per channel (`0xFF` = none). The buffered API (`eeprom_buffer_fill`/`eeprom_buffer_flush`) is used and a flush happens
 only when a value actually changes, so the host's `REST` for every actuator on each connect is normally
 free. After each flush the bytes are read back; on mismatch the reply is `ERR flash` and the RAM value is
 kept for this session. The readback invalidates the D-cache for the flash region first, because the
 core enables the D-cache and the flash HAL does no cache maintenance. After `ERR flash` a repeated
-`REST` with the same value rewrites and re-verifies.
+`REST` with the same value rewrites and re-verifies, and it rewrites all channels from RAM.
 
 A flash sector erase is slow (up to a few seconds on the F7) and **stalls the whole CPU**: the first
 received RX byte is buffered, further bytes are lost, and servo pulses and SysTick stall too. Therefore:
@@ -70,9 +71,6 @@ and pin table version) and a complemented copy of each rest; any mismatch discar
 survive an IWDG or soft reset, the NRST button and an ST-Link reset (release-on-boot then works), but
 are not guaranteed to survive a power cycle. After power-on, assume nothing is driven until the host
 sends `REST`, and `ANGLE` returns `ERR no rest` until then.
-
-The F767 EEPROM magic byte also includes the layout version, so a reflash with a different pin table
-ignores old rests. If a flash readback mismatches, the next `REST` rewrites all channels from RAM.
 
 ## Pin table (one table in `src/main.cpp`, `PINS[]`)
 
@@ -99,7 +97,7 @@ The core's Servo library uses a software timer (TIM7), so it can drive any of th
 
 ## Bench test (manual, left for Tim)
 
-`picocom -b 115200 /dev/ttyACM0`, one servo on channel 0.
+`pio device monitor -d firmware --echo`, one servo on channel 0. The announcer locks the port, so stop it first.
 
 | Step | Expected | Result |
 |---|---|---|
@@ -114,3 +112,7 @@ The core's Servo library uses a software timer (TIM7), so it can drive any of th
 | `ANGLE 1 60` with no rest stored for ch 1 | `ERR no rest`, no movement | |
 | `WATCHDOG 20000` / `MAXHOLD 200000` | `ERR range` | |
 | `REST 0 30`, power-cycle (F767) | rest still 30 (flash readback OK) | |
+| `REST 0 90` | `OK`, servo back at 90: the test rest is not left in flash | |
+| **Last step:** set the final `rest` in `config.toml`, run `uv run announcer` once | `controller connected on` in the log, servo at the final rest | |
+
+The last step matters because the rest in flash drives the servos at power-on, before the host sends any config (README, "Last bench step"). Keep the plungers out until it has happened.

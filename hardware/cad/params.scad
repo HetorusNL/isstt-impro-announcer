@@ -168,9 +168,9 @@ post_tail = 5;          // post length below the jaw
 bracket_leg = 20;       // ESTIMATE measure: corner bracket leg length
 rail_end_margin = 5;    // rail beyond the tensioner block
 ten_gap_x = 0.5;        // tensioner neck to the outer corner bracket, along the rail
-ten_gap_z = 6.5;        // tensioner arm below the outer corner bracket, room for the hex key
+ten_gap_z = 6.5;        // tensioner arm below the outer corner bracket, room for the bracket bolt key
 bracket_t = 3;          // ESTIMATE measure: corner bracket leg thickness (the bracket is a cube in the CAD)
-key_short_arm = 20;     // ESTIMATE measure: 3 mm L-key, short arm length including the long arm's thickness
+key_short_arm = 20;     // ESTIMATE measure: L-key for the bracket's M4x8 bolts (2.5 or 3 mm, unconfirmed), short arm length including the long arm's thickness
 key_engage = 2.5;       // ESTIMATE measure: how far the key goes into the button head
 ten_collar_d = 9.5;     // stop collar outer diameter
 ten_membrane = 0.2;     // printed skin closing the shoulder hole so the shoulder bridges cleanly; drill it out
@@ -246,7 +246,9 @@ ten_neck_x0 = bracket_leg + ten_gap_x;
 ten_neck_x1 = ten_neck_x0 + ten_neck;
 ten_travel = bolt_long - tnut_t - ten_shoulder;     // push bolt reach beyond the nut, head on the shoulder
 ten_collar_t = ten_travel - pad_squeeze;            // stop collar: head seats pad_squeeze past pad contact
-// Lowest point of a 3 mm L-key on the bracket's rail bolt, against the arm below it
+// ESTIMATE: lowest point of the L-key on the bracket's M4 rail bolt, against the arm below it. The bracket
+// is a cube here and the real one is a cast gusset, so access may be from the side or through its window.
+// m5_head_h stands in for the M4 head height (the larger of the two, so it is on the safe side).
 bracket_key_clearance = ten_gap_z + bracket_leg - (bracket_t + m5_head_h - key_engage + key_short_arm);
 // Feeler gauge: go must fit (plastic is clear), no-go must not fit (the pad is compressed)
 gauge_go = jaw_case_x - 0.25;

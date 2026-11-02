@@ -46,6 +46,10 @@ Power goes one way: the 5 V 4 A adapter feeds a servo rail on perfboard, and the
 
 Power up in this order: rail first, then the laptop USB. Check the Nucleo-144 manual (UM1974) on external power if the ST-Link does not come up.
 
+At power-on the firmware drives every servo to the rest in its flash, before the host sends any config. Keep the plungers out until one connect with the final rest has happened: see "Last bench step" in the [README](../README.md#last-bench-step).
+
+The rail also powers the Nucleo, so losing the adapter during a hold stops every failsafe at once. That is an accepted risk: see section 0.5 of the [checklist](../docs/onsite-checklist.md).
+
 ## Signal pins
 
 From the pin table in `firmware/PROTOCOL.md`. The button mapping is the default in `config.example.toml`.
