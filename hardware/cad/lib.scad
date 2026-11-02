@@ -101,15 +101,15 @@ module servo_cam() {
     }
 }
 
-// Plunger axes: tip at Z=0, top at Z=pl_len, centred on the axis
+// Plunger axes: tip of the EVA dot at Z=0, top at Z=pl_len, centred on the axis
 module servo_plunger() {
     difference() {
         union() {
-            box(-pl_w / 2, pl_w / 2, -pl_w / 2, pl_w / 2, 0, pl_len);
+            box(-pl_w / 2, pl_w / 2, -pl_w / 2, pl_w / 2, pl_dot_proud, pl_len);
             box(-pl_collar / 2, pl_collar / 2, -pl_collar / 2, pl_collar / 2, pl_len - pl_collar_t, pl_len);
         }
-        // recess for a dot of EVA, so the tip leaves no marks on the cap
-        box(-2.25, 2.25, -2.25, 2.25, -1, 1);
+        // recess for an EVA dot, so the tip leaves no marks on the cap
+        box(-2.25, 2.25, -2.25, 2.25, pl_dot_proud - 1, pad_t);
     }
 }
 
@@ -137,6 +137,45 @@ module edge_clamp() {
     }
 }
 jaw_bolt_z = [jaw_z0 + 8, lip_z0 - 8];
+
+// ---- Tensioner, local axes: X=0 at the post's outer face, +X outward along the
+// rail, Y centred on the rail, Z as desk. The block bolts to the rail's bottom slot
+// outside the outer corner bracket, and its arm passes under that bracket. The push
+// bolt's head sits behind the shoulder, its thread in a captive T-nut, and its tip
+// pushes the pad's stub. The pad bridges the slot in the post. It only pushes.
+
+module tensioner_block() {
+    socket = ten_stub + 0.4;
+    head_half = m5_head_d / 2 + 0.1;
+    rail_bolt_x = (ten_neck_x0 + ten_neck_x1) / 2;
+    difference() {
+        union() {
+            box(ten_x0, ten_neck_x1, -ten_w / 2, ten_w / 2, ten_arm_z0, ten_arm_z1);
+            box(ten_neck_x0, ten_neck_x1, -ten_w / 2, ten_w / 2, ten_arm_z1 - 0.01, rail_z0);
+            // slot key along the rail
+            box(ten_neck_x0, ten_neck_x1, -key_w / 2, key_w / 2, rail_z0, rail_z0 + key_d);
+        }
+        // pad stub socket
+        box(ten_x0 - 1, ten_nut_x0 + 0.01, -socket / 2, socket / 2, ten_z - socket / 2, ten_z + socket / 2);
+        // captive T-nut, slides in from the +Y side
+        box(ten_nut_x0, ten_nut_x1, -tnut_w / 2, ten_w / 2 + 1, ten_z - tnut_w / 2, ten_z + tnut_w / 2);
+        // push bolt through the shoulder
+        translate([ten_nut_x1 - 0.01, 0, ten_z]) rotate([0, 90, 0]) cylinder(d = m5_clear, h = ten_shoulder + 0.02);
+        // head slot: open outward for the hex key, open below for the rail bolt
+        box(ten_head_x, ten_neck_x1 + 1, -head_half, head_half, ten_arm_z0 - 1, ten_z + head_half);
+        // rail bolt, reached from below through the head slot
+        translate([rail_bolt_x, 0, ten_z]) {
+            cylinder(d = m5_clear, h = rail_z0 + key_d + 1 - ten_z);
+            cylinder(d = m5_head_d, h = rail_z0 - (car_t - m5_head_h) - ten_z);
+        }
+    }
+}
+
+// Pad axes: plate on the post's face at X=0, stub towards +X
+module tensioner_pad() {
+    box(0, ten_plate_t, -ten_plate_w / 2, ten_plate_w / 2, -ten_plate_h / 2, ten_plate_h / 2);
+    box(ten_plate_t - 0.01, ten_nut_x0, -ten_stub / 2, ten_stub / 2, -ten_stub / 2, ten_stub / 2);
+}
 
 module end_cap() {
     plate = 2;
@@ -250,7 +289,17 @@ function module_box(name) = let (
    [p[0] + half, max(ya, yb), br_top]];
 
 function rail_box() = [[rail_x0, rail_y - ext / 2, rail_z0], [rail_x0 + rail_len, rail_y + ext / 2, rail_z1]];
-function post_box(x) = [[x - ext / 2 - bracket_leg, rail_y - jaw_w / 2, post_z0], [x + ext / 2 + bracket_leg, rail_y + jaw_w / 2, rail_z0]];
+function post_box(x) = let (
+    s = x < case_w / 2 ? 1 : -1,   // +1 for the left post: the desk side is +X
+    in_ = max(ext / 2 + bracket_leg, ext / 2 + jaw_case_x + lip_reach),
+    out = ext / 2 + bracket_leg
+) [[min(x - s * out, x + s * in_), rail_y - jaw_w / 2, post_z0],
+   [max(x - s * out, x + s * in_), rail_y + jaw_w / 2, rail_z0]];
+function tensioner_box(x) = let (
+    s = x < case_w / 2 ? -1 : 1,   // outward
+    a = x + s * ext / 2,
+    b = a + s * ten_neck_x1
+) [[min(a, b), rail_y - ten_w / 2, ten_arm_z0], [max(a, b), rail_y + ten_w / 2, rail_z0]];
 
 function overlap(a, b) =
     a[0][0] < b[1][0] && b[0][0] < a[1][0] &&

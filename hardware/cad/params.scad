@@ -22,7 +22,6 @@ case_d = 190;           // ESTIMATE measure: case outer depth, front to back
 case_h = 65;            // ESTIMATE measure: table to the top of the black rim
 case_rim_w = 10;        // ESTIMATE measure: width of the black rim seen from above (edge profile)
 case_rim_h = 2;         // ESTIMATE measure: rim top above the panel surface (edge profile)
-case_corner_r = 3;      // ESTIMATE measure: radius of the case's vertical corners (edge profile)
 
 // ---- Buttons ----------------------------------------------------------------
 pitch_x = 19;           // ESTIMATE scale reference; measure: SC 1 centre to SC 6 centre, divide by 5
@@ -58,29 +57,31 @@ actuated = ["SC1", "SC2", "SC3", "SPREKEN"];
 // ---- Covered buttons and their keep-out volume (safety, spec section 4) ------
 // Ontruimingsalarm (evacuation alarm) and Koppel ruimtes. No frame part may enter.
 covered_buttons = ["KOPPEL", "ONTRUIMING"];
-alarm_name = "ONTRUIMING";
-alarm_xy = btn_xy(alarm_name); // ESTIMATE follows the button grid; measure: case left/front faces to alarm centre
+// The keep-outs follow these two positions, not the grid. Measure them directly.
+alarm_xy = btn_xy("ONTRUIMING"); // ESTIMATE measure: case left and front faces to the alarm button centre
+koppel_xy = btn_xy("KOPPEL");    // ESTIMATE measure: case left and front faces to the Koppel ruimtes button centre
+function panel_xy(name) = name == "ONTRUIMING" ? alarm_xy : name == "KOPPEL" ? koppel_xy : btn_xy(name);
 cover_w = 18;           // ESTIMATE measure: flip cover width (X)
 cover_d = 20;           // ESTIMATE measure: flip cover depth (Y)
 cover_h = 12;           // ESTIMATE measure: closed cover top above the panel
 cover_pin_z = 4;        // ESTIMATE measure: hinge pin height above the panel (dummy cover on the replica)
 cover_swing_r = sqrt(cover_d * cover_d + cover_h * cover_h); // cover pivots on its back edge
 keepout_side = 10;      // finger room left and right of the cover
-keepout_front = 4;      // finger room in front of the cover lip (SC 3 is directly in front)
+lip_clearance_min = 4;  // minimum clearance, any part to the cover lip. Not finger room: the hand comes from above
 keepout_back = 5;       // margin behind the swung-open cover
 keepout_h = 120;        // hand room above the panel; no part may span over the cover below this
 
 // [[xmin, ymin, zmin], [xmax, ymax, zmax]] of the keep-out around one covered button
-function keepout_box(name) = let (p = btn_xy(name)) [
-    [p[0] - cover_w / 2 - keepout_side, p[1] - cover_d / 2 - keepout_front, 0],
+function keepout_box(name) = let (p = panel_xy(name)) [
+    [p[0] - cover_w / 2 - keepout_side, p[1] - cover_d / 2 - lip_clearance_min, 0],
     [p[0] + cover_w / 2 + keepout_side, p[1] + cover_d / 2 + cover_swing_r + keepout_back, keepout_h]
 ];
 
 // ---- Rubber/EVA pads --------------------------------------------------------
 pad_t = 3;              // EVA or rubber sheet thickness (sheet not ordered yet; measure when it arrives)
 pad_pocket = 1.5;       // pad recess depth; the pad stands proud by the rest
-pad_squeeze = 0.75;     // compression set when clamping (25 % of pad_t)
-pad_stress = 0.05;      // ESTIMATE [N/mm2] EVA stress at 25 % compression, low end. Check by feel
+pad_squeeze = 0.75;     // compression per side when clamped. The one squeeze number; see the post gap in frame_assembly's echo
+pad_stress = 0.05;      // ESTIMATE [N/mm2] EVA stress at 25 % compression, low end. A constant: if pad_squeeze / pad_t changes, change this too
 pad_mu = 0.5;           // ESTIMATE EVA on powder coat friction, conservative
 
 // ---- 2020 extrusion, slot 6 --------------------------------------------------
@@ -124,7 +125,7 @@ sv_stall_kgcm = 2.2;    // ESTIMATE stall torque at 5 V; listings vary 1.8 to 2.
 // pitch. So each module sits centred on its own column, and a cam on the horn
 // pushes a plunger guided straight down. The cam eccentricity is the arm length.
 arm_len = 2.5;          // effective lever arm = cam eccentricity
-cam_r = 7;              // cam disc radius
+cam_r = 6.75;           // cam disc radius
 cam_t = 6;              // cam thickness (along the shaft)
 cam_mu = 0.3;           // ESTIMATE printed plastic sliding on printed plastic
 horn_seat = 4;          // ESTIMATE measure: servo top face to the horn's outer face with a horn fitted
@@ -137,6 +138,7 @@ pl_w = 6;               // plunger square section
 pl_clear = 0.4;         // total clearance in the guide bore
 pl_collar = 9;          // plunger top collar width; stops it dropping out off the desk
 pl_collar_t = 2;
+pl_dot_proud = 1;       // EVA dot stands this far out of the plunger tip recess
 pl_rest_gap = 1;        // gap between cam and plunger top at the cam's closest position
 guide_len = 10;         // plunger guide length
 guide_wall = 2.4;
@@ -164,7 +166,16 @@ lip_reach = 8;          // lip reach over the rim, kept short of the panel
 jaw_under_head = 4;     // jaw material under the bolt heads
 post_tail = 5;          // post length below the jaw
 bracket_leg = 20;       // ESTIMATE measure: corner bracket leg length
-rail_end_margin = 5;    // rail beyond the outer corner brackets
+rail_end_margin = 5;    // rail beyond the tensioner block
+ten_gap = 0.5;          // tensioner block to the outer corner bracket
+ten_neck = 16;          // tensioner neck length along the rail
+ten_w = 20;             // tensioner width (Y)
+ten_wall = 3;           // tensioner wall above and below the T-nut pocket
+ten_shoulder = 2;       // wall the T-nut bears on, with the push bolt head behind it
+ten_stub = 8;           // pressure pad stub section and length
+ten_plate_t = 3;        // pressure pad plate thickness, bridges the slot in the post
+ten_plate_w = 16;       // pressure pad width (Y), wider than slot_w
+ten_plate_h = 14;       // pressure pad height (Z), stays below the corner bracket
 stock_len = 1000;       // the extrusion Tim ordered
 saw_kerf = 3;
 
@@ -201,6 +212,8 @@ sleeve_half = (pl_w + pl_clear) / 2 + guide_wall;
 
 // Derived: clamp and frame, x measured from the post's inner face
 jaw_case_x = jaw_t + pad_t - pad_pocket - pad_squeeze;
+// The lip pad only carries the frame's weight, so it compresses less than pad_squeeze
+// and the frame sits slightly higher than this. The module height adjustment absorbs it.
 lip_z0 = case_rim_h + pad_t - pad_pocket - pad_squeeze;
 jaw_z0 = case_rim_h - grip_h;
 jaw_z1 = lip_z0 + lip_t;
@@ -208,9 +221,24 @@ post_z0 = jaw_z0 - post_tail;
 post_len = rail_z0 - post_z0;
 post_x_l = -jaw_case_x - ext / 2;           // left post centre
 post_x_r = case_w + jaw_case_x + ext / 2;   // right post centre
-rail_len = post_x_r - post_x_l + 2 * (ext / 2 + bracket_leg + rail_end_margin); // cut length
+rail_len = post_x_r - post_x_l + 2 * (ext / 2 + bracket_leg + ten_gap + ten_neck + rail_end_margin); // cut length
 rail_x0 = (case_w - rail_len) / 2;
 post_span = post_x_r - post_x_l;
+post_gap_uncompressed = jaw_t + pad_t - pad_pocket; // post inner face to case wall, pad just touching
+post_gap_contact = jaw_t;                           // jaw plastic touches the case here: never go this far
+post_spacing_target = case_w + 2 * jaw_case_x;      // inner face to inner face of the posts
+
+// Derived: tensioner, local X measured outward from the post's outer face
+ten_arm_z1 = rail_z0 - bracket_leg - ten_gap;       // arm passes below the outer corner bracket
+ten_z = ten_arm_z1 - ten_wall - tnut_w / 2;         // push bolt axis
+ten_arm_z0 = ten_z - tnut_w / 2 - ten_wall;
+ten_x0 = ten_plate_t;                               // arm's inner end with the pad fully back
+ten_nut_x0 = ten_x0 + ten_stub;
+ten_nut_x1 = ten_nut_x0 + tnut_t;
+ten_head_x = ten_nut_x1 + ten_shoulder;
+ten_neck_x0 = bracket_leg + ten_gap;
+ten_neck_x1 = ten_neck_x0 + ten_neck;
+ten_travel = bolt_long - tnut_t - ten_shoulder;     // push bolt reach beyond the nut, head seated
 
 // ---- Replica panel (hardware/replica) ----------------------------------------
 rp_t = 5;               // top plate thickness
@@ -256,7 +284,12 @@ sv_stall_nmm = sv_stall_kgcm * 98.0665;             // 1 kg.cm = 98.0665 N.mm
 press_torque = btn_force * (arm_len + cam_mu * cam_r); // lever plus cam friction, worst cam angle
 servo_margin = sv_stall_nmm / press_torque;
 assert(servo_margin >= 2, "servo force margin below 2x at this arm length");
-assert(cam_r + arm_len <= pitch_x / 2, "cams of neighbouring modules could touch");
+assert(cam_r + arm_len <= pitch_x / 2 - 0.25, "cams of neighbouring modules could touch");
+assert(cam_r - arm_len >= horn_hub_d / 2 + 0.15 + 0.4, "cam wall around the horn hub too thin");
+assert(pad_squeeze <= 0.6 * (pad_t - pad_pocket), "pad_squeeze too close to jaw plastic touching the case");
+assert(ten_travel >= 2 * pad_squeeze, "tensioner travel too short for the squeeze");
+assert(ten_z + ten_plate_h / 2 <= rail_z0 - bracket_leg, "tensioner pad would hit the corner bracket");
+assert(ten_arm_z0 > jaw_z1, "tensioner must stay above the jaw");
 assert(br_w < pitch_x, "module wider than the button pitch");
 assert(bolt_long - br_t - car_skin >= m5_min_thread, "height bolt thread engagement too short");
 assert(bolt_long - (car_t - m5_head_h) - slot_lip >= m5_min_thread, "carriage bolt thread engagement too short");

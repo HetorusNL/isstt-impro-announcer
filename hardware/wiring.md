@@ -73,6 +73,8 @@ Servos connect to the rail through the 30 cm extension leads.
 | Red | +5 V | +5 V |
 | Orange | Signal | signal |
 
+**Routing rule: never run a lead across or above the two covered buttons** (*Ontruimingsalarm*, *Koppel ruimtes*). The hand volume above them stays free. Run leads along the rail and away from the covers, and fix them so they cannot sag into that volume.
+
 ## Speaker
 
 There is no USB sound card. The Earson ER-151 takes audio from the laptop's 3.5 mm jack, and its USB power from a separate wall charger, because its battery lasts about 5 hours. Don't power it from the laptop or from the servo rail. Listen for hum, and check that it does not power off by itself in AUX mode.
