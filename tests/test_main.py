@@ -153,7 +153,7 @@ def test_inhibitor_spawns_and_kills(monkeypatch: pytest.MonkeyPatch) -> None:
     with inhibit.Inhibitor():
         assert procs[0].argv == [
             "systemd-inhibit",
-            "--what=sleep:idle",
+            "--what=sleep:idle:handle-lid-switch",
             "--who=announcer",
             "--why=tournament announcements",
             "sleep",

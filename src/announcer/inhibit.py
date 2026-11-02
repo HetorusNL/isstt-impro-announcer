@@ -1,4 +1,4 @@
-"""Keep the laptop awake while the announcer runs (systemd-inhibit)."""
+"""Keep the laptop awake, also with the lid closed, while the announcer runs (systemd-inhibit)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 COMMAND = [
     "systemd-inhibit",
-    "--what=sleep:idle",
+    "--what=sleep:idle:handle-lid-switch",
     "--who=announcer",
     "--why=tournament announcements",
     "sleep",
@@ -21,7 +21,7 @@ STOP_TIMEOUT_S = 5.0
 
 
 class Inhibitor:
-    """Context manager: blocks sleep/idle while inside. Missing systemd-inhibit only warns."""
+    """Context manager: blocks sleep, idle and lid close inside. A missing tool only warns."""
 
     def __init__(self) -> None:
         self._proc: subprocess.Popen[bytes] | None = None
