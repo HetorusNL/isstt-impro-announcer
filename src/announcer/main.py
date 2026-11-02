@@ -14,7 +14,7 @@ from announcer import config
 from announcer.audio.player import MockPlayer, Player, SoundPlayer
 from announcer.audio.tts import Tts
 from announcer.clock import Clock, RealClock, SimClock
-from announcer.config import Config, ConfigError
+from announcer.config import Config, ConfigError, ConfigGuard
 from announcer.config import Tts as TtsConfig
 from announcer.controller.base import Controller
 from announcer.controller.mock import MockController
@@ -34,6 +34,7 @@ SIM_STATE_DIR = "sim"  # next to the real store: state/sim/schedule.json
 class Runtime:
     cfg: Config
     cfg_path: Path
+    cfg_guard: ConfigGuard
     clock: Clock
     ctrl: Controller
     player: Player
@@ -105,6 +106,7 @@ def build_source(args: argparse.Namespace, cfg: Config) -> ScheduleSource:
 
 
 def build_runtime(args: argparse.Namespace) -> Runtime:
+    guard = ConfigGuard(args.config)  # before the load: an edit in between refuses a save
     try:
         cfg = config.load(args.config)
     except ConfigError as e:
@@ -131,6 +133,7 @@ def build_runtime(args: argparse.Namespace) -> Runtime:
     return Runtime(
         cfg=cfg,
         cfg_path=Path(args.config),
+        cfg_guard=guard,
         clock=clock,
         ctrl=build_controller(args, cfg, clock),
         player=player,

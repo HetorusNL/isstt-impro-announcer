@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from announcer.clock import Clock
 from announcer.config import Actuator
 from announcer.controller.base import ControllerError
+
+log = logging.getLogger(__name__)
 
 DEFAULT_PRESS_MS = 250
 DEFAULT_RELEASE_MS = 250
@@ -34,7 +37,9 @@ class MockController:
             raise ControllerError(f"mock failure on {kind} {button}".rstrip())
 
     def _record(self, kind: str, button: str) -> None:
-        self.events.append((self._clock.now(), kind, button))
+        now = self._clock.now()
+        self.events.append((now, kind, button))
+        log.info("%s %s %s", now.isoformat(timespec="milliseconds"), kind, button)
 
     def _ms(self, button: str) -> tuple[int, int]:
         act = self.actuators.get(button)

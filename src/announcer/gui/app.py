@@ -11,8 +11,10 @@ from nicegui import app, ui
 
 from announcer.audio.player import SoundPlayer
 from announcer.config import SAMPLE_RENDER, Config
+from announcer.controller.base import ControllerError
 from announcer.engine import Engine, Key
 from announcer.gui import view
+from announcer.model import Session
 from announcer.sequencer import SPREKEN
 
 if TYPE_CHECKING:
@@ -95,11 +97,30 @@ def _hall_boxes(cfg: Config, selected: list[str]) -> Callable[[], list[str]]:
     return lambda: [h for h, box in boxes.items() if box.value]
 
 
+def _estop_button(engine: Engine, cal: view.Calibrator) -> None:
+    async def stop() -> None:
+        cal.abort()
+        try:
+            await engine.emergency_stop()
+        except ControllerError as e:
+            ui.notify(
+                f"RELEASE FAILED ({e}): the firmware watchdog is the fallback. Check the servos.",
+                type="negative",
+                multi_line=True,
+                timeout=0,
+            )
+            return
+        ui.notify("Emergency stop: all released, PAUSED until Resume", type="warning")
+
+    ui.button("EMERGENCY STOP", on_click=stop, color="red").classes("text-2xl p-6 font-bold")
+
+
 def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
     @ui.page("/")
     def dashboard() -> None:
         _header(rt)
         clock = ui.label().classes("text-7xl font-mono")
+        _estop_button(engine, cal)
         with ui.row().classes("items-center gap-6"):
             state = ui.label().classes("text-3xl font-bold")
             toggle = ui.button(
@@ -123,14 +144,23 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
             except (KeyError, RuntimeError) as e:
                 ui.notify(str(e), type="warning")
 
+        def cancel(session: Session) -> None:
+            error = view.cancel_queued(engine, session)
+            if error is not None:
+                ui.notify(error, type="warning")
+
         @ui.refreshable
         def lists() -> None:
             with ui.row().classes("w-full items-start gap-12"):
                 with ui.column():
                     ui.label("Upcoming").classes("text-xl font-bold")
+                    for s in engine.queued:
+                        with ui.row().classes("items-center"):
+                            ui.label(view.queued_label(s)).classes("font-mono")
+                            ui.button("cancel", on_click=partial(cancel, s)).props("dense")
                     for s in engine.upcoming[:UPCOMING_SHOWN]:
                         ui.label(
-                            f"{s.start_at:%a %H:%M:%S}  {view.session_kinds(s)}"
+                            f"{view.fmt_session_times(s)}  {view.session_kinds(s)}"
                             f"  ({view.session_matches(s)} matches)"
                         ).classes("font-mono")
                 with ui.column():
@@ -153,7 +183,9 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
         def tick() -> None:
             now = rt.clock.now()
             clock.text = f"{now:%a %H:%M:%S}"
-            state.text = "PAUSED" if engine.paused else "RUNNING"
+            state.text = "RUNNING"
+            if engine.paused:
+                state.text = "EMERGENCY STOP: PAUSED" if engine.estopped else "PAUSED"
             state.classes(
                 replace="text-3xl font-bold "
                 + ("text-orange-600" if engine.paused else "text-green-700")
@@ -179,7 +211,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 playing.text = f"NOW PLAYING: {view.session_kinds(cur)} ({', '.join(cur.halls)})"
             if engine.upcoming:
                 s = engine.upcoming[0]
-                nxt.text = f"Next: {s.start_at:%a %H:%M:%S} {view.session_kinds(s)}"
+                nxt.text = f"Next: {view.fmt_session_times(s)} {view.session_kinds(s)}"
                 countdown.text = view.fmt_countdown((s.start_at - now).total_seconds())
             else:
                 nxt.text, countdown.text = "No upcoming sessions", ""
@@ -194,6 +226,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
     @ui.page("/manual")
     def manual() -> None:
         _header(rt)
+        _estop_button(engine, cal)
         cfg = engine.cfg
         ui.label("Halls").classes("text-xl font-bold")
         halls = _hall_boxes(cfg, cfg.announce.halls)
@@ -273,6 +306,19 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
             if not cal.jog(name, int(angle), target_rest):
                 refused()
 
+        async def test_tap(name: str) -> None:
+            press, rest = sliders[name]
+            if press.value is None or rest.value is None:
+                return
+            saved = engine.cfg.actuators[name]
+            target_rest = int(rest.value)
+            if name == SPREKEN:
+                target_rest = view.safe_spreken_rest(target_rest, int(press.value), saved.rest)
+            tap = partial(
+                cal.tap, name, int(press.value), target_rest, saved.press_ms, saved.release_ms
+            )
+            await act(tap, f"tap {name}")
+
         async def release_on_close() -> None:
             try:
                 await cal.release_all()  # refused (no-op) while a session or talk runs
@@ -286,10 +332,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
             with ui.card().classes("w-full max-w-3xl"):
                 with ui.row().classes("w-full items-center"):
                     ui.label(name).classes("text-lg font-bold w-24")
-                    ui.button(
-                        "Test tap",
-                        on_click=partial(act, partial(cal.tap, name), f"tap {name}"),
-                    )
+                    ui.button("Test tap", on_click=partial(test_tap, name))
                     if name == SPREKEN:
                         ui.label(
                             f"press is temporary: back to rest {view.SPREKEN_RETURN_S:g} s "
@@ -333,7 +376,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 c.announce.deselect_zones_after = bool(deselect.value)
 
             async def save() -> None:
-                error = await view.apply_config(engine, rt.cfg_path, edit, rt.player)
+                error = await view.apply_config(engine, rt.cfg_path, edit, rt.player, rt.cfg_guard)
                 _notify_error(error, f"saved to {rt.cfg_path}")
 
             async def test_sequence() -> None:
@@ -362,10 +405,18 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
         texts = {}
 
         async def preview(key: str) -> None:
+            refusal = view.preview_refusal(engine, rt.clock.now())
+            if refusal is not None:
+                ui.notify(refusal, type="warning")
+                return
             try:
                 text = (texts[key].value or "").format_map(SAMPLE_RENDER)
                 tts = rt.tts_factory(engine.cfg.tts)
                 path = await tts.synth(text)
+                refusal = view.preview_refusal(engine, rt.clock.now())  # synth takes a while
+                if refusal is not None:
+                    ui.notify(refusal, type="warning")
+                    return
                 await SoundPlayer(None, engine.cfg.audio.volume).play(path)  # laptop speakers
             except Exception as e:
                 ui.notify(f"preview failed: {e!r}", type="negative", multi_line=True)
@@ -377,6 +428,14 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
         ui.label("Halls to announce in").classes("text-xl font-bold")
         halls = _hall_boxes(cfg, cfg.announce.halls)
         poll = ui.number("poll interval (s)", value=cfg.schedule.poll_seconds, min=10, step=10)
+        ui.label("Match minutes per round").classes("text-xl font-bold")
+        rounds = {}
+        with ui.row():
+            for round_name, minutes in cfg.schedule.round_minutes.items():
+                rounds[round_name] = ui.number(round_name, value=minutes, min=1, step=1)
+            default_minutes = ui.number(
+                "other rounds", value=cfg.schedule.default_match_minutes, min=1, step=1
+            )
         ui.label(f"Schedule source: {cfg.schedule.kind} (edit config.toml to change)")
 
         def edit(c: Config) -> None:
@@ -384,9 +443,11 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 c.messages[key] = box.value or ""
             c.announce.halls = halls()
             c.schedule.poll_seconds = int(poll.value)
+            c.schedule.round_minutes = {name: int(box.value) for name, box in rounds.items()}
+            c.schedule.default_match_minutes = int(default_minutes.value)
 
         async def save() -> None:
-            error = await view.apply_config(engine, rt.cfg_path, edit, rt.player)
+            error = await view.apply_config(engine, rt.cfg_path, edit, rt.player, rt.cfg_guard)
             _notify_error(error, f"saved to {rt.cfg_path}")
 
         ui.button("Save", on_click=save)

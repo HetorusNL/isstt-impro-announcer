@@ -13,16 +13,18 @@ from typing import Any, Protocol
 
 from announcer import config
 from announcer.audio.player import SoundPlayer
-from announcer.config import MIN_SPREKEN_TRAVEL_DEG, Config, ConfigError
+from announcer.config import MIN_SPREKEN_TRAVEL_DEG, Config, ConfigError, ConfigGuard
 from announcer.engine import HistoryEntry, Key
 from announcer.model import Session
-from announcer.sequencer import SPREKEN
+from announcer.sequencer import SPREKEN, _uninterruptible
 
 log = logging.getLogger(__name__)
 
 REPLAYABLE = ("skipped", "missed", "failed")
 TEST_PHRASE = "This is a test announcement."
 KIND_LABELS = {"match_start": "start", "match_end": "end", "manual_text": "manual"}
+PREVIEW_GUARD_S = 30.0  # no preview this close before a session: it would share the audio device
+QUEUED_TEXT_SHOWN = 60
 
 
 def hall_choices(cfg: Config) -> list[str]:
@@ -52,6 +54,23 @@ def session_kinds(session: Session) -> str:
 
 def session_matches(session: Session) -> int:
     return sum(len(a.matches) for a in session.announcements)
+
+
+def fmt_session_times(session: Session) -> str:
+    """When the session starts, and when its first word is due."""
+    due = session.announcements[0].due
+    return f"{session.start_at:%a %H:%M:%S} (due {due:%H:%M:%S})"
+
+
+def queued_label(session: Session) -> str:
+    text = session.announcements[0].text or ""
+    shown = text if len(text) <= QUEUED_TEXT_SHOWN else text[: QUEUED_TEXT_SHOWN - 3] + "..."
+    return f"queued: {shown} ({', '.join(session.halls)})"
+
+
+def cancel_queued(engine: Any, session: Session) -> str | None:
+    """Cancel a queued manual text. Returns an error or None."""
+    return None if engine.cancel_manual(session) else "it already started"
 
 
 def fmt_key(key: Key) -> str:
@@ -93,7 +112,12 @@ def history_rows(history: Sequence[HistoryEntry]) -> list[HistoryRow]:
 
 def list_signature(engine: Any, upcoming_limit: int) -> tuple[Any, ...]:
     """Changes whenever the dashboard lists need rebuilding."""
-    return (len(engine.history), tuple(engine.upcoming[:upcoming_limit]), engine.current)
+    return (
+        len(engine.history),
+        tuple(engine.upcoming[:upcoming_limit]),
+        engine.current,
+        tuple(engine.queued),
+    )
 
 
 def banner_text(engine: Any) -> str | None:
@@ -124,6 +148,20 @@ def desk_busy(engine: Any) -> bool:
     return engine.current is not None or engine.talking
 
 
+def preview_refusal(engine: Any, now: datetime) -> str | None:
+    """Why a message preview may not play now, or None.
+
+    It shares the audio device with the announcements: sounddevice's play would cut one off.
+    """
+    if desk_busy(engine):
+        return "Preview refused: a session or talk is using the desk."
+    if engine.upcoming:
+        left = (engine.upcoming[0].start_at - now).total_seconds()
+        if left < PREVIEW_GUARD_S:
+            return f"Preview refused: the next session starts within {PREVIEW_GUARD_S:g} s."
+    return None
+
+
 class _Reloadable(Protocol):
     cfg: Config
 
@@ -135,8 +173,11 @@ async def apply_config(
     path: Path,
     edit: Callable[[Config], None],
     player: object | None = None,
+    guard: ConfigGuard | None = None,
 ) -> str | None:
     """Edit a copy of the live config, save it, reload the engine. Returns an error or None."""
+    if guard is not None and guard.changed():
+        return f"{path} changed on disk since it was loaded: not saved. Restart the announcer."
     cfg = copy.deepcopy(engine.cfg)
     try:
         edit(cfg)
@@ -145,6 +186,8 @@ async def apply_config(
         return str(e)
     except OSError as e:
         return f"cannot save {path}: {e}"
+    if guard is not None:
+        guard.refresh()
     try:
         await engine.reload_config(cfg)
     except Exception as e:
@@ -226,7 +269,7 @@ SPREKEN_RETURN_S = 1.5  # a calibration press of SPREKEN returns to rest after t
 class _Servos(Protocol):
     async def set_angle(self, button: str, angle: int) -> None: ...
 
-    async def tap(self, button: str) -> None: ...
+    async def release(self, button: str) -> None: ...
 
     async def release_all(self) -> None: ...
 
@@ -269,13 +312,39 @@ class Calibrator:
                 self._return = asyncio.create_task(self._return_later(rest), name="spreken-rest")
         return True
 
-    async def tap(self, name: str) -> bool:
+    async def tap(
+        self, name: str, press: int, rest: int, press_ms: int = 250, release_ms: int = 250
+    ) -> bool:
+        """Press and return using these angles, not the saved ones.
+
+        Two ANGLEs: the firmware's RELEASE would go to its stored rest, not the slider's.
+        """
         if self._is_busy():
             return False
         async with self._lock:
-            await self._ctrl.tap(name)  # ends at rest
+            try:
+                await self._ctrl.set_angle(name, press)
+                await asyncio.sleep(press_ms / 1000)
+            finally:
+                await _uninterruptible(self._back_to_rest(name, rest))
+            await asyncio.sleep(release_ms / 1000)
             self.away.pop(name, None)
         return True
+
+    async def _back_to_rest(self, name: str, rest: int) -> None:
+        try:
+            await self._ctrl.set_angle(name, rest)
+        except Exception:
+            log.exception("returning %s to %s failed; releasing it to its stored rest", name, rest)
+            await self._ctrl.release(name)
+
+    def abort(self) -> None:
+        """Emergency stop: forget queued moves and the SPREKEN return. Moves nothing itself."""
+        self._cancel_return()
+        self._pending.clear()
+        if self._worker is not None:
+            self._worker.cancel()
+        self.away.clear()
 
     async def release_all(self) -> bool:
         if self._is_busy():

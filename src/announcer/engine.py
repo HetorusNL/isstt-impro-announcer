@@ -27,13 +27,14 @@ from announcer.planner import (
 )
 from announcer.schedule import store
 from announcer.schedule.source import ScheduleSource, SourceError
-from announcer.sequencer import run_session, talk_session
+from announcer.sequencer import _uninterruptible, run_session, talk_session
 
 log = logging.getLogger(__name__)
 
 Status = Literal["played", "skipped", "missed", "failed"]
 Key = tuple[str, str]
 TICK_S = 1.0  # longest clock-time sleep of the run loop
+ESTOP_SETTLE_S = 5.0  # how long an emergency stop waits for cancelled desk tasks to finish
 
 
 class Synth(Protocol):
@@ -90,6 +91,7 @@ class Engine:
 
         # state for the GUI
         self.paused = False
+        self.estopped = False  # paused by emergency_stop, until resume
         self.upcoming: list[Session] = []
         self.history: list[HistoryEntry] = []
         self.source_ok_at: datetime | None = None
@@ -103,6 +105,8 @@ class Engine:
         self._manual: list[Session] = []
         self._lock = asyncio.Lock()  # one desk session at a time (scheduled, manual, talk)
         self._sessions: set[asyncio.Task[None]] = set()  # in-flight desk session tasks
+        self._aborted: set[asyncio.Task[None]] = set()  # cancelled by emergency_stop
+        self._estop_count = 0  # waiters for the desk lock see an emergency stop by this
         self._poll_task: asyncio.Task[None] | None = None
         self._run_task: asyncio.Task[None] | None = None
         self._talk_task: asyncio.Task[None] | None = None
@@ -169,13 +173,58 @@ class Engine:
 
     def resume(self) -> None:
         self.paused = False
+        self.estopped = False
+
+    async def emergency_stop(self) -> None:
+        """Pause, cancel the running session or talk, release everything, now.
+
+        Takes no desk lock: release_all goes out while the session is still ending, and once
+        more after it ended. The cancelled session's own finally releases SPREKEN as well,
+        and it is recorded as failed, so it can be played again. Zones are not deselected.
+        Runs to the end even if the caller goes away. Raises ControllerError if the last
+        release_all failed (the firmware watchdog and max hold remain).
+        """
+        self.paused = True
+        self.estopped = True
+        self._estop_count += 1
+        log.warning("EMERGENCY STOP")
+        await _uninterruptible(self._stop_desk())
+
+    async def _stop_desk(self) -> None:
+        self._aborted.update(self._sessions)
+        running = [t for t in (self._talk_task, *self._sessions) if t is not None and not t.done()]
+        for task in running:
+            task.cancel()
+        try:
+            await self._ctrl.release_all()
+        except Exception:
+            log.exception("release_all at emergency stop failed; trying again")
+        if running:
+            await asyncio.wait(running, timeout=ESTOP_SETTLE_S)
+        await self._ctrl.release_all()
+
+    @property
+    def queued(self) -> list[Session]:
+        """Manual texts waiting for the desk, oldest first."""
+        return list(self._manual)
+
+    def cancel_manual(self, session: Session) -> bool:
+        """Drop a queued manual text. False if it is not queued (any more)."""
+        for i, queued in enumerate(self._manual):
+            if queued is session:
+                del self._manual[i]
+                return True
+        return False
 
     async def play_now(self, key: Key) -> None:
         """Play a skipped, missed or failed announcement now, as its own session (even if paused)."""
         self._check_running()
         if key not in self._replayable:
             raise KeyError(f"{key} is not a skipped, missed or failed announcement")
+        estops = self._estop_count
         async with self._lock:
+            if self._estop_count != estops:  # waited for the desk through an emergency stop
+                raise RuntimeError("cancelled by the emergency stop")
             entry = self._replayable.pop(key, None)
             if entry is None:  # played by a concurrent play_now meanwhile
                 return
@@ -207,7 +256,7 @@ class Engine:
         if not started.done():  # the talk ended before SPREKEN was held
             started.cancel()
             if self._talk_task.cancelled():  # by stop() while waiting for the lock
-                raise RuntimeError("engine stopped")
+                raise RuntimeError("talk cancelled: engine stopped or emergency stop")
             await self._talk_task  # re-raises its error
 
     async def talk_stop(self) -> None:
@@ -389,7 +438,7 @@ class Engine:
     async def _run_desk(self, session: Session) -> bool:
         """Run one desk session in its own task and record the result. Caller holds the lock.
 
-        Returns False (nothing recorded) if the session was cancelled, i.e. by stop().
+        Returns False (nothing recorded) if the session was cancelled by stop().
         """
         task = asyncio.create_task(self._desk(session), name="engine-session")
         self._sessions.add(task)
@@ -401,9 +450,14 @@ class Engine:
             await _settle(task)
         finally:
             self.current = None
+        aborted = task in self._aborted
+        self._aborted.discard(task)
         if task.cancelled():
             log.warning("session cancelled")
-            return False
+            if not aborted:
+                return False
+            self._record(session.announcements, session.halls, "failed", "emergency stop")
+            return True
         exc = task.exception()
         if exc is None:
             self._record(session.announcements, session.halls, "played")

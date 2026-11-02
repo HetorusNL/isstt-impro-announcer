@@ -246,6 +246,26 @@ def load(path: Path) -> Config:
     return cfg
 
 
+class ConfigGuard:
+    """Remembers a config file's content, to notice edits made outside the program."""
+
+    def __init__(self, path: Path) -> None:
+        self._path = Path(path)
+        self._content = self._read()
+
+    def _read(self) -> bytes | None:
+        try:
+            return self._path.read_bytes()
+        except OSError:
+            return None
+
+    def changed(self) -> bool:
+        return self._read() != self._content
+
+    def refresh(self) -> None:
+        self._content = self._read()
+
+
 def _strip_none(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _strip_none(v) for k, v in value.items() if v is not None}

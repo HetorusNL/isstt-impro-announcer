@@ -17,6 +17,7 @@ from announcer.config import Actuator, Config
 from announcer.controller.base import ControllerError
 from announcer.controller.mock import MockController
 from announcer.engine import Engine
+from announcer.gui import view
 from announcer.model import Match
 from announcer.planner import lead_seconds
 from announcer.schedule import store
@@ -862,5 +863,207 @@ async def test_skipped_blocks_of_the_source_are_exposed(tmp_path):
     try:
         assert engine.source_skipped == 2
         assert engine.matches_count == 1
+    finally:
+        await engine.stop()
+
+
+# emergency stop
+
+
+async def _running_hold(tmp_path, matches=None, speed=SPEED):
+    rig = make_rig(tmp_path, at(8, 59, 55), speed=speed)
+    rig.write(matches or [match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    await until(lambda: rig.times("hold") != [])
+    return rig, engine
+
+
+async def test_emergency_stop_during_hold_releases_and_stays_paused_until_resume(tmp_path):
+    rig, engine = await _running_hold(tmp_path, [match(at(9, 0), minutes=1)], speed=60.0)
+    try:
+        await engine.emergency_stop()
+        assert engine.paused and engine.estopped
+        assert engine.current is None
+        assert ("release", "SPREKEN") in rig.kinds()
+        assert rig.kinds()[-1] == ("release_all", "")
+        await until(lambda: engine.history != [])
+        assert statuses(engine) == [(key("match_start", at(9, 0)), "failed")]
+        assert engine.history[0].detail == "emergency stop"
+        # the end session comes due while paused: it does not fire
+        await until_clock(rig.clock, at(9, 1, 0))
+        assert len(rig.times("hold")) == 1
+        engine.resume()
+        assert not engine.paused and not engine.estopped
+        await until(lambda: len(rig.times("hold")) == 2)
+    finally:
+        await engine.stop()
+
+
+async def test_emergency_stop_is_not_blocked_by_the_desk_lock(tmp_path):
+    rig, engine = await _running_hold(tmp_path)
+    rig.ctrl.release_delay_s = 120.0  # the session's own release takes a while (0.2 s real)
+    try:
+        assert engine._lock.locked()
+        stopping = asyncio.create_task(engine.emergency_stop())
+        await until(lambda: ("release_all", "") in rig.kinds(), timeout=0.1)
+        assert ("release", "SPREKEN") not in rig.kinds()
+        await stopping
+        assert ("release", "SPREKEN") in rig.kinds()  # the finally still ran
+    finally:
+        await engine.stop()
+
+
+async def test_emergency_stop_with_stuck_session_still_returns(tmp_path, monkeypatch):
+    monkeypatch.setattr("announcer.engine.ESTOP_SETTLE_S", 0.01)
+    rig, engine = await _running_hold(tmp_path)
+    rig.ctrl.release_delay_s = 120.0
+    try:
+        await asyncio.wait_for(engine.emergency_stop(), 0.15)
+        assert rig.kinds()[-1] == ("release_all", "")
+    finally:
+        await engine.stop()
+
+
+async def test_emergency_stop_ends_a_talk(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await engine.talk_start(("SC1",))
+        assert engine.talking
+        await engine.emergency_stop()
+        assert not engine.talking
+        assert ("release", "SPREKEN") in rig.kinds()
+        await engine.talk_stop()  # the button's mouseup afterwards is harmless
+    finally:
+        await engine.stop()
+
+
+async def test_emergency_stop_works_with_nothing_running(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await engine.emergency_stop()
+        assert engine.paused
+        assert rig.kinds()[-1] == ("release_all", "")
+    finally:
+        await engine.stop()
+
+
+async def test_emergency_stop_reports_failed_release_but_still_stops(tmp_path):
+    rig, engine = await _running_hold(tmp_path)
+    rig.ctrl.fail_on = {"release_all"}
+    try:
+        with pytest.raises(ControllerError):
+            await engine.emergency_stop()
+        assert engine.paused
+        await until(lambda: engine.current is None)
+        assert ("release", "SPREKEN") in rig.kinds()
+    finally:
+        rig.ctrl.fail_on = set()
+        await engine.stop()
+
+
+async def test_play_now_queued_behind_a_session_does_not_run_after_emergency_stop(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0)), match(at(9, 30))])
+    engine = rig.engine()
+    engine.pause()
+    await engine.start()
+    try:
+        await until(lambda: engine.history != [])  # 09:00 skipped while paused
+        missed = engine.history[0].key
+        engine.resume()
+        await engine.manual_text(("SC1",), "first")
+        await until(lambda: rig.times("hold") != [])
+        waiting = asyncio.create_task(engine.play_now(missed))
+        await asyncio.sleep(0)
+        await engine.emergency_stop()
+        with pytest.raises(RuntimeError, match="emergency stop"):
+            await waiting
+        assert len(rig.times("hold")) == 1
+        assert missed in engine._replayable  # still available afterwards
+    finally:
+        await engine.stop()
+
+
+async def test_emergency_stopped_play_now_can_be_replayed(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    engine.pause()
+    await engine.start()
+    try:
+        await until(lambda: engine.history != [])
+        k = engine.history[0].key
+        playing = asyncio.create_task(engine.play_now(k))
+        await until(lambda: rig.times("hold") != [])
+        await engine.emergency_stop()
+        await playing
+        assert engine.history[-1].status == "failed"
+        await engine.play_now(k)
+        assert engine.history[-1].status == "played"
+    finally:
+        await engine.stop()
+
+
+# queued manual texts, calibration vs sessions, round minutes in settings
+
+
+async def test_queued_manual_visible_and_cancellable(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    engine.pause()
+    await engine.start()
+    try:
+        await engine.manual_text(("SC1",), "one")
+        await engine.manual_text(("SC1",), "two")
+        assert [s.announcements[0].text for s in engine.queued] == ["one", "two"]
+        first = engine.queued[0]
+        assert view.cancel_queued(engine, first) is None
+        assert [s.announcements[0].text for s in engine.queued] == ["two"]
+        assert engine.cancel_manual(first) is False
+        sig = view.list_signature(engine, 5)
+        await engine.manual_text(("SC1",), "three")
+        assert view.list_signature(engine, 5) != sig
+        for s in engine.queued:
+            engine.cancel_manual(s)
+        engine.resume()
+        await asyncio.sleep(0.05)
+        assert rig.player.played == []
+    finally:
+        await engine.stop()
+
+
+async def test_calibrator_refused_while_a_session_runs(tmp_path):
+    rig, engine = await _running_hold(tmp_path)
+    try:
+        cal = view.Calibrator(rig.ctrl, lambda: view.desk_busy(engine))
+        assert not cal.jog("SC1", 40, 10)
+        assert not await cal.tap("SC1", 40, 10)
+        assert not await cal.release_all()
+    finally:
+        await engine.stop()
+
+
+async def test_round_minutes_saved_from_settings_replan(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.write([Match(at(9, 0), "SC1", "Field 1", "A", "B", "Ref", "Round 1", None)])
+    engine = rig.engine()
+    await engine.start()
+    path = tmp_path / "config.toml"
+    try:
+        assert engine.upcoming[1].announcements[0].due == at(9, 15)
+
+        def edit(cfg: Config) -> None:
+            cfg.schedule.round_minutes["Round 1"] = 25
+
+        assert await view.apply_config(engine, path, edit) is None
+        assert engine.upcoming[1].announcements[0].due == at(9, 25)
     finally:
         await engine.stop()

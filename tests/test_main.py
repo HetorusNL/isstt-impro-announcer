@@ -4,7 +4,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -16,12 +16,13 @@ import soundfile as sf
 from announcer import config, inhibit
 from announcer.audio.player import MockPlayer, SoundPlayer
 from announcer.clock import RealClock, SimClock
-from announcer.config import Actuator, Config
+from announcer.config import Actuator, Config, ConfigGuard
 from announcer.controller.mock import MockController
 from announcer.controller.serial_ctrl import SerialController
 from announcer.engine import HistoryEntry
 from announcer.gui import view
 from announcer.main import build_runtime, parse_args, reset_sim_state
+from announcer.model import Announcement, Session
 from announcer.schedule.cupkit import CupkitSource
 from announcer.schedule.filesource import FileSource
 
@@ -365,8 +366,8 @@ class FakeServos:
             raise RuntimeError("serial gone")
         self.calls.append(("set_angle", button, angle))
 
-    async def tap(self, button: str) -> None:
-        self.calls.append(("tap", button, None))
+    async def release(self, button: str) -> None:
+        self.calls.append(("release", button, None))
 
     async def release_all(self) -> None:
         self.calls.append(("release_all", "", None))
@@ -407,7 +408,7 @@ async def test_calibrator_other_presses_stay() -> None:
     await asyncio.sleep(0.05)
     assert servos.calls == [("set_angle", "SC1", 40)]
     assert cal.away == {"SC1": 40}
-    assert await cal.tap("SC1")
+    assert await cal.tap("SC1", 40, 10, press_ms=1, release_ms=1)
     assert cal.away == {}
 
 
@@ -427,7 +428,7 @@ async def test_calibrator_refuses_while_busy() -> None:
     busy = [True]
     cal = view.Calibrator(servos, lambda: busy[0], return_s=0.01)
     assert not cal.jog("SC1", 40, 10)
-    assert not await cal.tap("SC1")
+    assert not await cal.tap("SC1", 40, 10)
     assert not await cal.release_all()  # e.g. tab closed during a session
     assert servos.calls == []
     busy[0] = False
@@ -538,3 +539,157 @@ async def test_apply_config_refuses_spreken_rest_near_press_and_bad_halls(tmp_pa
     assert "SPREKEN" in (await view.apply_config(engine, path, near))
     assert "at least one" in (await view.apply_config(engine, path, no_halls))
     assert engine.reloaded == [] and not path.exists()
+
+
+# calibration tap, preview guard, queue, config guard, session times (final review I2, I7, I9, I11)
+
+
+async def test_calibrator_tap_uses_the_slider_values_not_the_stored_rest() -> None:
+    servos = FakeServos()
+    cal = view.Calibrator(servos, lambda: False)
+    cal.away["SC1"] = 50
+    assert await cal.tap("SC1", 70, 120, press_ms=1, release_ms=1)
+    assert servos.calls == [("set_angle", "SC1", 70), ("set_angle", "SC1", 120)]
+    assert cal.away == {}
+
+
+async def test_calibrator_tap_returns_to_rest_when_cancelled() -> None:
+    servos = FakeServos()
+    cal = view.Calibrator(servos, lambda: False)
+    task = asyncio.create_task(cal.tap("SPREKEN", 70, 120, press_ms=10_000))
+    while not servos.calls:
+        await asyncio.sleep(0.001)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert servos.calls == [("set_angle", "SPREKEN", 70), ("set_angle", "SPREKEN", 120)]
+
+
+async def test_calibrator_tap_falls_back_to_release_when_return_fails() -> None:
+    class ReturnFails(FakeServos):
+        async def set_angle(self, button: str, angle: int) -> None:
+            if angle == 120:
+                raise RuntimeError("serial busy")
+            await super().set_angle(button, angle)
+
+    servos = ReturnFails()
+    cal = view.Calibrator(servos, lambda: False)
+    await cal.tap("SPREKEN", 70, 120, press_ms=1, release_ms=1)
+    assert servos.calls == [("set_angle", "SPREKEN", 70), ("release", "SPREKEN", None)]
+
+
+async def test_calibrator_abort_drops_pending_moves_and_return() -> None:
+    servos = FakeServos()
+    servos.gate = asyncio.Event()
+    cal = view.Calibrator(servos, lambda: False, return_s=0.01)
+    cal.jog("SPREKEN", 60, 90)
+    cal.jog("SC1", 40, 10)
+    await asyncio.sleep(0)
+    cal.away["SC2"] = 40
+    cal.abort()
+    servos.gate.set()
+    await asyncio.sleep(0.03)
+    assert servos.calls == []
+    assert cal.away == {}
+
+
+def _session(start: datetime, kind: str = "match_start") -> Session:
+    return Session(start, (Announcement(due=start, kind=kind),), ("SC1",))
+
+
+NOW = datetime(2026, 12, 19, 8, 0, tzinfo=TZ)
+
+
+def _preview_engine(upcoming=(), current=None, talking=False) -> SimpleNamespace:
+    return SimpleNamespace(upcoming=list(upcoming), current=current, talking=talking)
+
+
+def test_preview_allowed_when_desk_free_and_nothing_near() -> None:
+    assert view.preview_refusal(_preview_engine(), NOW) is None
+    later = NOW + timedelta(seconds=view.PREVIEW_GUARD_S + 1)
+    assert view.preview_refusal(_preview_engine([_session(later)]), NOW) is None
+
+
+def test_preview_refused_while_desk_busy() -> None:
+    assert "desk" in view.preview_refusal(_preview_engine(talking=True), NOW)
+    assert "desk" in view.preview_refusal(_preview_engine(current=_session(NOW)), NOW)
+
+
+def test_preview_refused_shortly_before_a_session() -> None:
+    soon = NOW + timedelta(seconds=view.PREVIEW_GUARD_S - 1)
+    assert "next session" in view.preview_refusal(_preview_engine([_session(soon)]), NOW)
+    overdue = NOW - timedelta(seconds=5)
+    assert "next session" in view.preview_refusal(_preview_engine([_session(overdue)]), NOW)
+
+
+def test_session_times_show_start_and_due() -> None:
+    due = datetime(2026, 12, 19, 9, 0, tzinfo=TZ)
+    session = Session(due - timedelta(seconds=5), (Announcement(due=due, kind="match_start"),), ())
+    assert view.fmt_session_times(session) == "Sat 08:59:55 (due 09:00:00)"
+
+
+def test_queued_label_shows_text_and_halls() -> None:
+    ann = Announcement(due=NOW, kind="manual_text", text="x" * 100)
+    label = view.queued_label(Session(NOW, (ann,), ("SC1", "SC2")))
+    assert "SC1, SC2" in label and "x" * 40 in label and "x" * 100 not in label
+
+
+def test_cancel_queued_via_view() -> None:
+    class Queue:
+        def __init__(self) -> None:
+            self.results = [True, False]
+
+        def cancel_manual(self, session: object) -> bool:
+            return self.results.pop(0)
+
+    queue = Queue()
+    assert view.cancel_queued(queue, object()) is None
+    assert "already started" in view.cancel_queued(queue, object())
+
+
+async def test_apply_config_refuses_when_file_changed_on_disk(tmp_path: Path) -> None:
+    class FakeEngine:
+        def __init__(self) -> None:
+            self.cfg = make_cfg()
+            self.reloaded: list[Config] = []
+
+        async def reload_config(self, cfg: Config) -> None:
+            self.reloaded.append(cfg)
+
+    engine = FakeEngine()
+    path = tmp_path / "config.toml"
+    config.save(engine.cfg, path)
+    guard = ConfigGuard(path)
+
+    def edit(cfg: Config) -> None:
+        cfg.announce.chime_seconds = 7.0
+
+    assert await view.apply_config(engine, path, edit, None, guard) is None
+    assert await view.apply_config(engine, path, edit, None, guard) is None  # own saves are fine
+    assert len(engine.reloaded) == 2
+
+    hand_edited = path.read_text() + "# by hand\n"
+    path.write_text(hand_edited)
+    error = await view.apply_config(engine, path, edit, None, guard)
+    assert error is not None and "Restart" in error
+    assert path.read_text() == hand_edited  # untouched
+    assert len(engine.reloaded) == 2
+
+
+def test_runtime_guards_the_config_it_loaded(cfg_path: Path) -> None:
+    rt = runtime(cfg_path, "--mock")
+    assert not rt.cfg_guard.changed()
+    cfg_path.write_text(cfg_path.read_text() + "# by hand\n")
+    assert rt.cfg_guard.changed()
+
+
+async def test_mock_logs_button_actions_at_info(caplog: pytest.LogCaptureFixture) -> None:
+    clock = SimClock(NOW, 1000)
+    ctrl = MockController(clock, make_cfg().actuators)
+    with caplog.at_level("INFO", logger="announcer.controller.mock"):
+        await ctrl.hold("SPREKEN")
+        await ctrl.release("SPREKEN")
+    messages = [r.getMessage() for r in caplog.records]
+    assert len(messages) == 2
+    assert "hold SPREKEN" in messages[0] and "release SPREKEN" in messages[1]
+    assert "2026-12-19" in messages[0]
