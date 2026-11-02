@@ -38,7 +38,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | Infill | 40 % gyroid | 15 % |
 | Supports | None. See the tensioner block note | Only for `speaker_cradle.scad`, under the cups |
 
-Print the tensioner block standing on its outer end, as its file lays it out. Slicing it shows three short bridges and no other overhang: the shoulder over the head slot (10.7 mm), the ceiling of the T-nut pocket (10.6 mm), and the top of the horizontal rail bolt hole (about 6 mm). The shoulder carries the push load, and it bends along its bridge strands, which is the strong direction. It has a 0.2 mm skin closing the bolt hole so the bridge prints whole: drill it out with a 5 mm drill. Check the collar thickness with calipers: it should be 2.2 mm, at 0.2 mm layers.
+Print the tensioner block standing on its outer end, as its file lays it out. Slicing it shows three short bridges and no other overhang: the shoulder over the head slot (10.7 mm), the ceiling of the T-nut pocket (10.6 mm), and the top of the horizontal rail bolt hole (about 6 mm). The shoulder carries the push load, and it bends along its bridge strands, which is the strong direction. It has a 0.2 mm skin closing the bolt hole so the bridge prints whole: drill it out with a 5.5 mm drill (`m5_clear`). Check the collar thickness with calipers: it should be 2.2 mm, at 0.2 mm layers.
 
 Print the gauge as laid out, so the blade thickness is in the print plane. Check both blades with calipers: go 10.45 mm, no-go 11.05 mm. If one is more than 0.1 mm off, sand it or reprint.
 
@@ -122,7 +122,7 @@ These follow the measured `case_w`, and `frame_assembly.scad` echoes them.
 
 If locking moved a post, the gauge shows it. Loosen, correct and measure again. If you have calipers that reach, you can also check the spacing of the post inner faces, 202.4 mm with the estimated `case_w`, just above the jaws and before fitting the modules. That check is optional.
 
-The block only pushes, and the collar touches only the block and the bolt, so the screw cannot pass the limit however hard you turn it, as long as the start was right.
+The block only pushes, and the collar touches only the block and the bolt, so the screw cannot pass the limit however hard you turn it, but only with the collar fitted and as long as the start was right. Never run the push bolt without its collar: the collar is what stops the jaw plastic reaching the case.
 
 **Foam take-up.** The tensioner stays fitted. If the foam relaxes, repeat the whole procedure from step 1, with the modules still on. The collar then sets 0.8 mm from the pad's new contact. Do not use a thinner collar: that is the one way to overshoot. If the GO blade no longer fits after this, the pad has taken a permanent set: replace it.
 
