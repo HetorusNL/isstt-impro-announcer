@@ -14,7 +14,7 @@ Shipping takes 2-4 weeks, so order early.
 | 1 | 2020 aluminium extrusion, 1 m (slot 6) — **ordered** | Stiff backbone; cut to length once the desk width is measured (with the current estimates: 1 rail 325.4 mm, 2 posts 90.4 mm, about 490 mm spare; the desk measurement can still change these) |
 | 4 | 2020 aluminium corner brackets (123-3D, cast gusset with centring lips and a window in the sloped face), with 2 M4×8 bolts and 2 M4 slide-in nuts each, so 8 of each — **ordered** | Rigid joints between rails / clamp blocks (stiffer than printed joints). M4, not M5: the bracket nuts come on top of the 18 M5 nuts. Key size unconfirmed: probably 2.5 mm if button head, 3 mm if socket head |
 | 20 + 50 + 50 | M5 slide-in T-nuts for 2020 (insert from the profile end **before** fitting corners/end caps), M5×8 and M5×10 button-head bolts — **ordered** | All printed parts mount with M5 into the slot; servos use their own MG90S screws. End caps are printed |
-| 1 | EVA foam or rubber sheet, 3 mm — **Tim is getting it** | Clamp pads |
+| 1 | EVA foam sheet, high density, 3 mm — **ordered**. Check on arrival: no adhesive backing, real thickness (`pad_t`) | Clamp pads |
 | 1 | Speaker strap: any velcro cable tie or elastic strap that fits the cradle slots (3 × 18.8 mm) | Holds the ER-151 in the cradle |
 | (4) | M2×8 screws for the servo horns, **only if needed** | Only if the stock horn screw is too short with the cam fitted. Check on one servo first |
 
@@ -26,4 +26,4 @@ Shipping takes 2-4 weeks, so order early.
 | Power adapter XSG-0504000HEU 5 V 4 A + DC jack to terminal block | TinyTronics (006405, 000287) | 2026-11-01 | in stock (Eindhoven warehouse), a few days |
 | Servo extension cable 30 cm ×10 | product code KW-2640 (mailbox package, 48 h) | 2026-11-01 | ~2026-11-03 |
 | 2020 profile 1 m, 4 corner brackets, 20 M5 slide-in nuts, M5×8/M5×10 bolts | 123-3D | 2026-11-01 | 2026-11-03 |
-| EVA foam / rubber sheet | Tim is getting it | | |
+| Premium EVA foam, high density, 3 mm | Foam Atelier (order 127445) | 2026-11-03 | ships in 1–3 working days, at most 5 when busy |
