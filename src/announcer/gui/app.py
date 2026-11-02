@@ -108,6 +108,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
             ctrl = ui.label().classes("text-lg")
             talk = ui.label("TALKING").classes("text-lg bg-red-600 text-white px-2 rounded")
             away = ui.label().classes("text-lg bg-orange-600 text-white px-2 rounded")
+            event = ui.label().classes("text-lg")
         banner = ui.label().classes("w-full bg-red-600 text-white p-2 text-lg")
         source = ui.label()
         playing = ui.label().classes("text-2xl bg-green-600 text-white px-2 rounded")
@@ -164,6 +165,8 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
             away.text = "CALIBRATION: off rest: " + ", ".join(
                 f"{n} {a}" for n, a in sorted(cal.away.items())
             )
+            event.text = f"Last board event: {rt.ctrl.last_event}"
+            event.visible = rt.ctrl.last_event is not None
             banner.text = f"Schedule source error: {engine.source_error}"
             banner.visible = engine.source_error is not None
             source.text = (

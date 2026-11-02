@@ -17,9 +17,16 @@ class MockController:
         self._clock = clock
         self.actuators: dict[str, Actuator] = dict(actuators or {})
         self.connected = False
+        self.interruptions = 0
+        self.last_event: str | None = None
         self.events: list[tuple[datetime, str, str]] = []
         self.fail_on: set[str] = set()
         self.release_delay_s = 0.0  # test hook: make release take (clock) time
+
+    def simulate_interruption(self, line: str = "EVT WATCHDOG") -> None:
+        """Test hook: the board reports line, as if it released on its own."""
+        self.last_event = line
+        self.interruptions += 1
 
     def _check(self, kind: str, button: str = "") -> None:
         # fail_on entries: an action kind ("tap") or a kind for one button ("tap:SC2")

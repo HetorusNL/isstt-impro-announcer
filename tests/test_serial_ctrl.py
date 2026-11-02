@@ -3,14 +3,16 @@ import threading
 import time
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from announcer.clock import SimClock
-from announcer.config import Actuator
+from announcer.config import Actuator, Config
 from announcer.controller.base import ControllerError
 from announcer.controller.serial_ctrl import SerialController
+from announcer.sequencer import run_session
 
 TZ = ZoneInfo("Europe/Amsterdam")
 ACTUATORS = {
@@ -466,5 +468,89 @@ async def test_reads_are_bounded(port: FakePort) -> None:
         port.noise_before_reply = b"x" * 10_000  # line noise without a newline
         await ctrl.set_angle("SC1", 70)  # the reply after the noise is still found
         assert len(ctrl._buf) < 2048
+    finally:
+        await ctrl.close()
+
+
+# interruption count (final review I6)
+
+
+@pytest.mark.parametrize("line", ["EVT BOOT", "EVT BOOT IWDG", "EVT WATCHDOG", "EVT MAXHOLD 3"])
+async def test_board_events_count_as_interruptions(port: FakePort, line: str) -> None:
+    ctrl = make(port, keepalive_ms=10_000)
+    await ctrl.connect()
+    try:
+        assert ctrl.interruptions == 0
+        port.events_before_reply = [line]
+        await ctrl.release("SPREKEN")
+        assert ctrl.interruptions == 1
+        assert ctrl.last_event == line
+    finally:
+        await ctrl.close()
+
+
+async def test_lost_link_counts_as_an_interruption_once(port: FakePort) -> None:
+    ctrl = make(port, keepalive_ms=10)
+    await ctrl.connect()
+    try:
+        port.silent = True
+        await wait_for(lambda: not ctrl.connected)
+        assert ctrl.interruptions == 1
+        port.silent = False
+        await wait_for(lambda: ctrl.connected)
+        assert ctrl.interruptions == 1
+    finally:
+        await ctrl.close()
+
+
+async def test_first_connect_failures_are_not_interruptions(port: FakePort) -> None:
+    port.fail_open = 2
+    ctrl = make(port, keepalive_ms=10)
+    with pytest.raises(ControllerError):
+        await ctrl.connect()
+    try:
+        await wait_for(lambda: ctrl.connected)
+        assert ctrl.interruptions == 0
+    finally:
+        await ctrl.close()
+
+
+async def test_session_on_serial_fails_when_board_reports_maxhold(port: FakePort) -> None:
+    class SilentPlayer:
+        def duration(self, path: Path) -> float:
+            return 0.0
+
+        async def play(self, path: Path) -> None:
+            await asyncio.sleep(0.01)
+
+    clock = SimClock(datetime(2026, 12, 18, 9, 0, tzinfo=TZ), speed=1000)
+    ctrl = SerialController(
+        "/dev/fake",
+        ACTUATORS,
+        10_000,
+        2000,
+        60,
+        clock,
+        port_factory=port.open,
+        reply_timeout_s=0.1,
+        rest_timeout_s=0.5,
+    )
+    cfg = Config()
+    cfg.actuators = ACTUATORS
+    cfg.announce.chime_seconds = 0.0
+    cfg.announce.tail_seconds = 0.0
+    await ctrl.connect()
+    try:
+        original = port.write
+
+        def write(data: bytes) -> int:
+            if data.startswith(b"RELEASE 3"):
+                port.events_before_reply = ["EVT MAXHOLD 3"]
+            return original(data)
+
+        port.write = write
+        with pytest.raises(ControllerError, match="EVT MAXHOLD 3"):
+            await run_session(ctrl, SilentPlayer(), clock, cfg, ("SC1",), [Path("x.wav")])
+        assert port.commands()[-1] == "RELEASE 3"
     finally:
         await ctrl.close()

@@ -1,11 +1,16 @@
 import asyncio
 import shutil
 import subprocess
+import sys
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pytest
+import soundfile as sf
 
 from announcer import config, inhibit
 from announcer.audio.player import MockPlayer, SoundPlayer
@@ -441,3 +446,46 @@ async def test_calibrator_records_errors() -> None:
     await cal.wait()
     assert cal.error is not None and "serial gone" in cal.error
     assert cal.away == {}
+
+
+class FakeSoundDevice:
+    """sounddevice whose wait() only returns after stop(), like a device that never finishes."""
+
+    def __init__(self) -> None:
+        self.stopped = threading.Event()
+        self.playing = threading.Event()
+
+    def play(self, data: object, samplerate: int, device: object = None) -> None:
+        self.playing.set()
+
+    def wait(self) -> None:
+        assert self.stopped.wait(5.0)
+
+    def stop(self) -> None:
+        self.stopped.set()
+
+
+async def test_sound_player_cancel_stops_device_off_the_event_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    device = FakeSoundDevice()
+    monkeypatch.setitem(sys.modules, "sounddevice", device)
+    loop_thread = threading.current_thread()
+    stop_thread: list[threading.Thread] = []
+    orig_stop = device.stop
+
+    def stop() -> None:
+        stop_thread.append(threading.current_thread())
+        orig_stop()
+
+    device.stop = stop
+    clip = tmp_path / "clip.wav"
+    sf.write(clip, np.zeros(800, dtype="int16"), 8000)
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(SoundPlayer(None, 1.0).play(clip), 0.05)
+    deadline = time.monotonic() + 2.0
+    while not device.stopped.is_set():
+        assert time.monotonic() < deadline
+        await asyncio.sleep(0.001)
+    assert device.playing.is_set()
+    assert stop_thread[0] is not loop_thread  # a hung PortAudio cannot block the SPREKEN release

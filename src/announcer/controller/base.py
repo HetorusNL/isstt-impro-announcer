@@ -13,6 +13,8 @@ class ControllerError(Exception):
 
 class Controller(Protocol):
     connected: bool
+    interruptions: int  # counts what can end a hold unseen: board events, a lost link
+    last_event: str | None  # the last event line from the board
 
     async def connect(self) -> None: ...
 

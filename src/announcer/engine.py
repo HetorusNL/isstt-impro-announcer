@@ -357,7 +357,8 @@ class Engine:
         if self.paused:
             return None
         candidates = self._manual[:1]
-        if self.upcoming and now >= self.upcoming[0].start_at:
+        # disconnected: a scheduled session waits for a reconnect, until _skip_late takes it
+        if self._ctrl.connected and self.upcoming and now >= self.upcoming[0].start_at:
             candidates.append(self.upcoming[0])
         return min(candidates, key=lambda s: s.start_at) if candidates else None
 

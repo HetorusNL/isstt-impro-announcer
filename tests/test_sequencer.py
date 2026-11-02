@@ -391,3 +391,172 @@ async def test_talk_session_no_deselect_when_release_fails():
         async with talk_session(ctrl, clock, cfg, HALLS):
             pass
     assert sum(1 for _, k, _ in ctrl.events if k == "tap") == 2
+
+
+# bounded audio, interrupted holds, zones after a failed start (final review I5, I6, I1)
+
+
+class NeverReturnsPlayer(MockPlayer):
+    async def play(self, path: Path) -> None:
+        await asyncio.Event().wait()
+
+
+async def test_hung_player_times_out_and_releases(tmp_path, monkeypatch):
+    monkeypatch.setattr("announcer.sequencer.PLAY_MARGIN_S", 0.02)
+    cfg = make_cfg()
+    clock, ctrl, _ = setup(cfg)
+    with pytest.raises(TimeoutError, match="clip.wav did not finish"):
+        await asyncio.wait_for(
+            run_session(
+                ctrl, NeverReturnsPlayer(clock), clock, cfg, HALLS, [silent_wav(tmp_path, 0.01)]
+            ),
+            5.0,
+        )
+    assert ctrl.events[-1][1:] == ("release", "SPREKEN")
+
+
+async def test_play_bound_is_duration_plus_margin(tmp_path, monkeypatch):
+    monkeypatch.setattr("announcer.sequencer.PLAY_MARGIN_S", 0.0)
+    timeouts = []
+    orig = asyncio.wait_for
+
+    async def spy(aw, timeout):
+        timeouts.append(timeout)
+        return await orig(aw, timeout)
+
+    monkeypatch.setattr("announcer.sequencer.asyncio.wait_for", spy)
+    cfg = make_cfg()
+    clock, ctrl, player = setup(cfg, speed=10_000.0)
+    await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.5)])
+    assert timeouts == [pytest.approx(0.5)]
+
+
+async def test_interruption_during_hold_raises_after_release(tmp_path):
+    cfg = make_cfg()
+    clock, ctrl, player = setup(cfg)
+
+    async def interrupt():
+        while not any(k == "hold" for _, k, _ in ctrl.events):
+            await asyncio.sleep(0.001)
+        ctrl.simulate_interruption("EVT WATCHDOG")
+
+    task = asyncio.create_task(interrupt())
+    with pytest.raises(ControllerError, match="EVT WATCHDOG"):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.5)])
+    await task
+    assert ctrl.events[-1][1:] == ("release", "SPREKEN")
+
+
+async def test_interruption_before_the_hold_does_not_fail_the_session(tmp_path):
+    cfg = make_cfg()
+    clock, ctrl, player = setup(cfg)
+    ctrl.simulate_interruption("EVT BOOT")
+    await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.1)])
+    assert ctrl.events[-1][1:] == ("release", "SPREKEN")
+
+
+async def test_interruption_seen_during_the_release_counts(tmp_path):
+    # the serial controller reads EVT lines during exchanges, so the release may bring it
+    cfg = make_cfg()
+    clock, ctrl, player = setup(cfg)
+
+    async def release(button, _orig=ctrl.release):
+        ctrl.simulate_interruption("EVT MAXHOLD 2")
+        await _orig(button)
+
+    ctrl.release = release
+    with pytest.raises(ControllerError, match="EVT MAXHOLD 2"):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.1)])
+
+
+async def test_interruption_with_deselect_still_deselects_and_raises(tmp_path):
+    cfg = make_cfg(deselect_zones_after=True)
+    clock, ctrl, player = setup(cfg)
+
+    async def release(button, _orig=ctrl.release):
+        ctrl.simulate_interruption("EVT WATCHDOG")
+        await _orig(button)
+
+    ctrl.release = release
+    with pytest.raises(ControllerError, match="EVT WATCHDOG"):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.1)])
+    assert [(k, b) for _, k, b in ctrl.events][-2:] == [("tap", "SC1"), ("tap", "SC2")]
+
+
+async def test_hold_failure_toggles_zones_back_without_deselect_option(tmp_path):
+    cfg = make_cfg()  # deselect_zones_after False
+    clock, ctrl, player = setup(cfg)
+    ctrl.fail_on = {"hold"}
+    with pytest.raises(ControllerError, match="mock failure on hold"):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.1)])
+    assert [(k, b) for _, k, b in ctrl.events] == [
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+        ("release", "SPREKEN"),
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+    ]
+
+
+async def test_tap_failure_toggles_selected_zones_back_without_deselect_option(tmp_path):
+    cfg = make_cfg()
+    clock, ctrl, player = setup(cfg)
+    ctrl.fail_on = {"tap:SC2"}
+    with pytest.raises(ControllerError, match="tap SC2"):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.1)])
+    assert [(k, b) for _, k, b in ctrl.events] == [
+        ("tap", "SC1"),
+        ("release", "SPREKEN"),
+        ("tap", "SC1"),
+    ]
+
+
+async def test_failed_toggle_back_is_logged_and_keeps_original_error(tmp_path, caplog):
+    cfg = make_cfg()
+    clock, ctrl, player = setup(cfg)
+    ctrl.fail_on = {"hold"}
+
+    async def flaky_tap(button, _orig=ctrl.tap):
+        if any(k == "release" for _, k, _ in ctrl.events):
+            raise ControllerError("tap broke")
+        await _orig(button)
+
+    ctrl.tap = flaky_tap
+    with pytest.raises(ControllerError, match="mock failure on hold"):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.1)])
+    assert ctrl.events[-1][1:] == ("release", "SPREKEN")
+    assert "deselecting SC1 failed" in caplog.text
+
+
+async def test_no_toggle_back_when_failure_comes_after_the_hold(tmp_path):
+    cfg = make_cfg()
+    clock, ctrl, player = setup(cfg, fail=True)
+    with pytest.raises(RuntimeError):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.1)])
+    assert ctrl.events[-1][1:] == ("release", "SPREKEN")
+    assert sum(1 for _, k, _ in ctrl.events if k == "tap") == 2
+
+
+async def test_no_toggle_back_when_release_failed(tmp_path):
+    cfg = make_cfg()
+    clock, ctrl, player = setup(cfg)
+    ctrl.fail_on = {"hold", "release", "release_all"}
+    with pytest.raises(ControllerError, match="mock failure on hold"):
+        await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.1)])
+    assert sum(1 for _, k, _ in ctrl.events if k == "tap") == 2
+
+
+async def test_talk_hold_failure_toggles_zones_back_without_deselect_option():
+    cfg = make_cfg()
+    clock, ctrl, _ = setup(cfg)
+    ctrl.fail_on = {"hold"}
+    with pytest.raises(ControllerError, match="mock failure on hold"):
+        async with talk_session(ctrl, clock, cfg, HALLS):
+            pass
+    assert [(k, b) for _, k, b in ctrl.events] == [
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+        ("release", "SPREKEN"),
+        ("tap", "SC1"),
+        ("tap", "SC2"),
+    ]

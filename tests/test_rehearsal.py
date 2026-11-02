@@ -55,6 +55,7 @@ class Rehearsal:
         self.cfg.announce.late_threshold_seconds = 600
         self.clock = SimClock(start, speed)
         self.ctrl = MockController(self.clock, self.cfg.actuators)
+        self.ctrl.connected = True
         self.player = MockPlayer(self.clock)
         self.tts = SilentTts(tmp_path / "tts")
         self.engine = Engine(

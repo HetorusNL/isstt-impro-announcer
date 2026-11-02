@@ -96,6 +96,7 @@ class Rig:
         self.cfg = cfg
         self.clock = SimClock(start, speed)
         self.ctrl = MockController(self.clock, cfg.actuators)
+        self.ctrl.connected = True
         self.player = MockPlayer(self.clock)
         self.tts = FakeTts(tmp_path / "tts", self.clock)
         self.schedule_file = tmp_path / "schedule.json"
@@ -744,3 +745,109 @@ async def test_reload_config_rebuilds_tts_when_tts_settings_change(tmp_path):
         await engine.stop()
     assert engine.history[0].status == "played"
     assert rig.player.played[-1].parent == tmp_path / "tts2"
+
+
+# disconnected controller, bounded audio, interrupted holds (final review I4, I5, I6)
+
+
+async def test_disconnected_session_waits_then_is_skipped_late(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.ctrl.connected = False
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until_clock(rig.clock, at(9, 0, 30))
+        assert engine.history == []  # not failed at start_at: it may still reconnect in time
+        await until(lambda: engine.history != [])
+        assert statuses(engine) == [(key("match_start", at(9, 0)), "skipped")]
+        assert rig.ctrl.events == []
+        assert engine.history[0].detail == "late"
+    finally:
+        await engine.stop()
+
+
+async def test_reconnect_within_late_threshold_still_plays(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.ctrl.connected = False
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until_clock(rig.clock, at(9, 0, 20))
+        assert engine.history == []
+        rig.ctrl.connected = True
+        await until(lambda: engine.history != [])
+        assert statuses(engine) == [(key("match_start", at(9, 0)), "played")]
+    finally:
+        await engine.stop()
+
+
+async def test_play_now_without_connection_fails_clearly(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.ctrl.connected = False
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: engine.history != [])
+        rig.ctrl.fail_on = {"tap"}  # what a disconnected SerialController does
+        await engine.play_now(key("match_start", at(9, 0)))
+        assert engine.history[-1].status == "failed"
+        assert "mock failure on tap" in engine.history[-1].detail
+    finally:
+        await engine.stop()
+
+
+class HangingPlayer(MockPlayer):
+    """Never returns from its first play (a stuck audio device), later plays work."""
+
+    def __init__(self, clock: SimClock) -> None:
+        super().__init__(clock)
+        self.hung = 0
+
+    async def play(self, path: Path) -> None:
+        if not self.hung:
+            self.hung += 1
+            await asyncio.Event().wait()
+        await super().play(path)
+
+
+async def test_hung_audio_fails_session_frees_lock_and_later_sessions_run(tmp_path, monkeypatch):
+    monkeypatch.setattr("announcer.sequencer.PLAY_MARGIN_S", 0.02)
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.player = HangingPlayer(rig.clock)
+    rig.tts.seconds = 0.01  # the bound runs in real time: keep it short against the sim clock
+    rig.write([match(at(9, 0), minutes=1)])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: len(engine.history) == 2, timeout=5.0)
+        assert statuses(engine) == [
+            (key("match_start", at(9, 0)), "failed"),
+            (key("match_end", at(9, 1)), "played"),
+        ]
+        assert "did not finish" in engine.history[0].detail
+        assert rig.times("release") and len(rig.times("release")) == 2
+        assert not engine._lock.locked()
+    finally:
+        await engine.stop()
+
+
+async def test_interrupted_hold_is_failed_and_can_be_played_again(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: rig.times("hold") != [])
+        rig.ctrl.simulate_interruption("EVT MAXHOLD 2")
+        await until(lambda: engine.history != [])
+        assert statuses(engine) == [(key("match_start", at(9, 0)), "failed")]
+        assert "EVT MAXHOLD 2" in engine.history[0].detail
+        assert rig.ctrl.last_event == "EVT MAXHOLD 2"
+        assert rig.times("release")
+        await engine.play_now(key("match_start", at(9, 0)))
+        assert engine.history[-1].status == "played"
+    finally:
+        await engine.stop()

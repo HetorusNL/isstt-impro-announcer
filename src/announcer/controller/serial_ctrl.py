@@ -33,6 +33,7 @@ RECONNECT_S = 2.0
 DRAIN_MAX_S = 1.0  # discarding boot output on open stops after this, even if lines keep coming
 READ_SIZE = 256  # bytes per readline: a newline-less stream cannot make one read unbounded
 MAX_LINE_BYTES = 1024  # firmware lines are short; a longer partial line is noise, dropped
+INTERRUPTING_EVENTS = ("EVT BOOT", "EVT WATCHDOG", "EVT MAXHOLD")  # the board released by itself
 
 
 class FirmwareError(ControllerError):
@@ -71,6 +72,7 @@ class SerialController:
         self._reconnect_s = reconnect_s
         self._io_timeout_s = io_timeout_s
         self.connected = False
+        self.interruptions = 0  # written under self._lock only
         self.last_event: str | None = None
         self._port: Any = None
         self._buf = b""
@@ -265,6 +267,7 @@ class SerialController:
             except Exception:
                 log.exception("closing %s failed", self._port_name)
         if was:
+            self.interruptions += 1  # counted here, so the reconnect that follows is covered
             log.error("controller disconnected from %s", self._port_name)
 
     async def _keepalive_loop(self) -> None:
@@ -359,6 +362,8 @@ class SerialController:
 
     def _event(self, line: str) -> None:
         self.last_event = line
+        if line.startswith(INTERRUPTING_EVENTS):
+            self.interruptions += 1
         if line.startswith("EVT BOOT"):
             self._reconfigure = True  # handled by the keep-alive task, not inside a reply wait
         log.warning("board: %s", line)
