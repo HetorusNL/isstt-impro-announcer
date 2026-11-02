@@ -900,6 +900,16 @@ async def test_emergency_stop_during_hold_releases_and_stays_paused_until_resume
         await engine.stop()
 
 
+async def test_emergency_stop_clears_queued_manual_texts(tmp_path):
+    rig, engine = await _running_hold(tmp_path)
+    try:
+        await engine.manual_text(["SC1"], "Queued before the stop.")
+        await engine.emergency_stop()
+        assert engine.queued == []
+    finally:
+        await engine.stop()
+
+
 async def test_emergency_stop_is_not_blocked_by_the_desk_lock(tmp_path):
     rig, engine = await _running_hold(tmp_path)
     rig.ctrl.release_delay_s = 120.0  # the session's own release takes a while (0.2 s real)

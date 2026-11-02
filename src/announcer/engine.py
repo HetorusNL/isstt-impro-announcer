@@ -180,13 +180,15 @@ class Engine:
 
         Takes no desk lock: release_all goes out while the session is still ending, and once
         more after it ended. The cancelled session's own finally releases SPREKEN as well,
-        and it is recorded as failed, so it can be played again. Zones are not deselected.
+        and it is recorded as failed, so it can be played again. Queued manual texts are
+        dropped. Zones are not deselected.
         Runs to the end even if the caller goes away. Raises ControllerError if the last
         release_all failed (the firmware watchdog and max hold remain).
         """
         self.paused = True
         self.estopped = True
         self._estop_count += 1
+        self._manual.clear()  # nothing queued goes out at Resume
         log.warning("EMERGENCY STOP")
         await _uninterruptible(self._stop_desk())
 
