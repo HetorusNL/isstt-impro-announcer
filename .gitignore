@@ -8,3 +8,5 @@ state/
 cache/
 voices/
 firmware/.pio/
+hardware/cad/*.stl
+hardware/replica/*.stl
