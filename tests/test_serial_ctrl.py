@@ -439,8 +439,8 @@ async def test_rest_other_err_on_reconfigure_disconnects(port: FakePort) -> None
     try:
         port.errors["REST 3"] = "channel"
         port.push_event("EVT BOOT")
-        await wait_for(lambda: not ctrl.connected)
-        assert not port.is_open
+        # _drop marks disconnected first, then closes the port in a worker thread
+        await wait_for(lambda: not ctrl.connected and not port.is_open)
     finally:
         await ctrl.close()
 
