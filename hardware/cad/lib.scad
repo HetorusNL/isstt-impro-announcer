@@ -160,7 +160,7 @@ module tensioner_block() {
         // captive T-nut, slides in from the +Y side
         box(ten_nut_x0, ten_nut_x1, -tnut_w / 2, ten_w / 2 + 1, ten_z - tnut_w / 2, ten_z + tnut_w / 2);
         // push bolt through the shoulder
-        translate([ten_nut_x1 - 0.01, 0, ten_z]) rotate([0, 90, 0]) cylinder(d = m5_clear, h = ten_shoulder + 0.02);
+        translate([ten_nut_x1 - 0.01, 0, ten_z]) rotate([0, 90, 0]) cylinder(d = m5_clear, h = ten_shoulder + 0.01 - ten_membrane);
         // head slot: open outward for the hex key, open below for the rail bolt
         box(ten_head_x, ten_neck_x1 + 1, -head_half, head_half, ten_arm_z0 - 1, ten_z + head_half);
         // rail bolt, reached from below through the head slot
@@ -175,6 +175,35 @@ module tensioner_block() {
 module tensioner_pad() {
     box(0, ten_plate_t, -ten_plate_w / 2, ten_plate_w / 2, -ten_plate_h / 2, ten_plate_h / 2);
     box(ten_plate_t - 0.01, ten_nut_x0, -ten_stub / 2, ten_stub / 2, -ten_stub / 2, ten_stub / 2);
+}
+
+// Stop collar, on the push bolt under its head. Axis along Z.
+module tensioner_collar() {
+    difference() {
+        cylinder(d = ten_collar_d, h = ten_collar_t);
+        translate([0, 0, -1]) cylinder(d = m5_clear, h = ten_collar_t + 2);
+    }
+}
+
+// Go/no-go feeler gauge, in use and print position: bar on the bed, blades up.
+// Blade thickness is along X, in the print plane, so it is not rounded to layers.
+// X=0 is the face against the case wall: the bar stays clear of the wall below the post.
+module squeeze_gauge() {
+    bar_y = 60;
+    bar_z = 4;
+    blade_y = 8;
+    blade_z = bar_z + 10;
+    difference() {
+        union() {
+            box(0, gauge_go, 0, bar_y, 0, bar_z);
+            box(0, gauge_go, 0, blade_y, 0, blade_z);
+            box(0, gauge_nogo, bar_y - blade_y, bar_y, bar_z, blade_z);
+        }
+        translate([gauge_go / 2, blade_y + 2, bar_z - 0.6]) linear_extrude(1)
+            rotate(90) translate([0, -2.5]) text("GO", size = 5);
+        translate([gauge_go / 2, bar_y - blade_y - 2, bar_z - 0.6]) linear_extrude(1)
+            rotate(90) translate([-9, -2.5]) text("NO", size = 5);
+    }
 }
 
 module end_cap() {

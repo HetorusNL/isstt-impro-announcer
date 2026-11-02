@@ -80,8 +80,8 @@ function keepout_box(name) = let (p = panel_xy(name)) [
 // ---- Rubber/EVA pads --------------------------------------------------------
 pad_t = 3;              // EVA or rubber sheet thickness (sheet not ordered yet; measure when it arrives)
 pad_pocket = 1.5;       // pad recess depth; the pad stands proud by the rest
-pad_squeeze = 0.75;     // compression per side when clamped. The one squeeze number; see the post gap in frame_assembly's echo
-pad_stress = 0.05;      // ESTIMATE [N/mm2] EVA stress at 25 % compression, low end. A constant: if pad_squeeze / pad_t changes, change this too
+pad_squeeze = 0.8;      // compression per side when clamped: one full turn of the M5 push bolt. The one squeeze number; sets the stop collar
+pad_stress = 0.05;      // ESTIMATE [N/mm2] EVA stress at about 25 % compression, low end. A constant: if pad_squeeze / pad_t changes much, change this too
 pad_mu = 0.5;           // ESTIMATE EVA on powder coat friction, conservative
 
 // ---- 2020 extrusion, slot 6 --------------------------------------------------
@@ -167,7 +167,13 @@ jaw_under_head = 4;     // jaw material under the bolt heads
 post_tail = 5;          // post length below the jaw
 bracket_leg = 20;       // ESTIMATE measure: corner bracket leg length
 rail_end_margin = 5;    // rail beyond the tensioner block
-ten_gap = 0.5;          // tensioner block to the outer corner bracket
+ten_gap_x = 0.5;        // tensioner neck to the outer corner bracket, along the rail
+ten_gap_z = 6.5;        // tensioner arm below the outer corner bracket, room for the hex key
+bracket_t = 3;          // ESTIMATE measure: corner bracket leg thickness (the bracket is a cube in the CAD)
+key_short_arm = 20;     // ESTIMATE measure: 3 mm L-key, short arm length including the long arm's thickness
+key_engage = 2.5;       // ESTIMATE measure: how far the key goes into the button head
+ten_collar_d = 9.5;     // stop collar outer diameter
+ten_membrane = 0.2;     // printed skin closing the shoulder hole so the shoulder bridges cleanly; drill it out
 ten_neck = 16;          // tensioner neck length along the rail
 ten_w = 20;             // tensioner width (Y)
 ten_wall = 3;           // tensioner wall above and below the T-nut pocket
@@ -221,7 +227,7 @@ post_z0 = jaw_z0 - post_tail;
 post_len = rail_z0 - post_z0;
 post_x_l = -jaw_case_x - ext / 2;           // left post centre
 post_x_r = case_w + jaw_case_x + ext / 2;   // right post centre
-rail_len = post_x_r - post_x_l + 2 * (ext / 2 + bracket_leg + ten_gap + ten_neck + rail_end_margin); // cut length
+rail_len = post_x_r - post_x_l + 2 * (ext / 2 + bracket_leg + ten_gap_x + ten_neck + rail_end_margin); // cut length
 rail_x0 = (case_w - rail_len) / 2;
 post_span = post_x_r - post_x_l;
 post_gap_uncompressed = jaw_t + pad_t - pad_pocket; // post inner face to case wall, pad just touching
@@ -229,16 +235,22 @@ post_gap_contact = jaw_t;                           // jaw plastic touches the c
 post_spacing_target = case_w + 2 * jaw_case_x;      // inner face to inner face of the posts
 
 // Derived: tensioner, local X measured outward from the post's outer face
-ten_arm_z1 = rail_z0 - bracket_leg - ten_gap;       // arm passes below the outer corner bracket
+ten_arm_z1 = rail_z0 - bracket_leg - ten_gap_z;     // arm passes below the outer corner bracket
 ten_z = ten_arm_z1 - ten_wall - tnut_w / 2;         // push bolt axis
 ten_arm_z0 = ten_z - tnut_w / 2 - ten_wall;
 ten_x0 = ten_plate_t;                               // arm's inner end with the pad fully back
 ten_nut_x0 = ten_x0 + ten_stub;
 ten_nut_x1 = ten_nut_x0 + tnut_t;
 ten_head_x = ten_nut_x1 + ten_shoulder;
-ten_neck_x0 = bracket_leg + ten_gap;
+ten_neck_x0 = bracket_leg + ten_gap_x;
 ten_neck_x1 = ten_neck_x0 + ten_neck;
-ten_travel = bolt_long - tnut_t - ten_shoulder;     // push bolt reach beyond the nut, head seated
+ten_travel = bolt_long - tnut_t - ten_shoulder;     // push bolt reach beyond the nut, head on the shoulder
+ten_collar_t = ten_travel - pad_squeeze;            // stop collar: head seats pad_squeeze past pad contact
+// Lowest point of a 3 mm L-key on the bracket's rail bolt, against the arm below it
+bracket_key_clearance = ten_gap_z + bracket_leg - (bracket_t + m5_head_h - key_engage + key_short_arm);
+// Feeler gauge: go must fit (plastic is clear), no-go must not fit (the pad is compressed)
+gauge_go = jaw_case_x - 0.25;
+gauge_nogo = jaw_case_x + 0.35;
 
 // ---- Replica panel (hardware/replica) ----------------------------------------
 rp_t = 5;               // top plate thickness
@@ -288,6 +300,11 @@ assert(cam_r + arm_len <= pitch_x / 2 - 0.25, "cams of neighbouring modules coul
 assert(cam_r - arm_len >= horn_hub_d / 2 + 0.15 + 0.4, "cam wall around the horn hub too thin");
 assert(pad_squeeze <= 0.6 * (pad_t - pad_pocket), "pad_squeeze too close to jaw plastic touching the case");
 assert(ten_travel >= 2 * pad_squeeze, "tensioner travel too short for the squeeze");
+assert(ten_travel - ten_collar_t < pad_t - pad_pocket - 0.3, "stop collar lets the jaw plastic reach the case");
+assert(ten_collar_t >= 1.2, "stop collar too thin to print");
+assert(bracket_key_clearance >= 1, "hex key cannot reach the outer corner bracket's rail bolt");
+assert(gauge_go >= post_gap_contact + 0.2, "go blade would pass with the jaw plastic touching");
+assert(gauge_nogo <= post_gap_uncompressed - 0.2, "no-go blade would pass with the pad uncompressed");
 assert(ten_z + ten_plate_h / 2 <= rail_z0 - bracket_leg, "tensioner pad would hit the corner bracket");
 assert(ten_arm_z0 > jaw_z1, "tensioner must stay above the jaw");
 assert(br_w < pitch_x, "module wider than the button pitch");

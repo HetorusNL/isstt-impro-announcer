@@ -31,7 +31,8 @@ echo(pad_area_mm2 = pad_area, pad_normal_N = pad_normal, clamp_hold_N = pad_hold
 // All four buttons at once is the safe upper limit; the normal peak is one button.
 assert(clamp_margin >= 2, "pad friction holds less than 2x the press force of all actuated buttons");
 echo(post_spacing_target = post_spacing_target, post_gap_target = jaw_case_x, post_gap_uncompressed = post_gap_uncompressed, post_gap_contact = post_gap_contact);
-echo(tensioner_travel = ten_travel, tensioner_z = ten_z);
+echo(tensioner_travel = ten_travel, tensioner_z = ten_z, stop_collar_t = ten_collar_t, bracket_key_clearance = bracket_key_clearance);
+echo(gauge_go = gauge_go, gauge_nogo = gauge_nogo);
 echo(test_button_leaf_t = tb_leaf_t, test_button_force_N = tb_print_E * tb_leaf_b * pow(tb_leaf_t, 3) / (4 * pow(tb_leaf_l, 3)) * (tb_preload + btn_travel));
 
 // ---- Picture -----------------------------------------------------------------
@@ -65,6 +66,7 @@ module frame() {
         translate([a[0], rail_y, 0]) rotate(a[1]) {
             tensioner_block();
             translate([0, 0, ten_z]) tensioner_pad();
+            translate([ten_head_x, 0, ten_z]) rotate([0, 90, 0]) tensioner_collar();
         }
 }
 
