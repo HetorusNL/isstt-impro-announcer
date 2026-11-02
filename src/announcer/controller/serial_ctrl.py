@@ -115,11 +115,31 @@ class SerialController:
             await self._drop()
 
     async def configure(self, actuators: dict[str, Actuator]) -> None:
+        """Store the actuators and send their rests; on failure the previous ones stay."""
+        previous = self.actuators
         self.actuators = dict(actuators)
-        if self.connected:
+        if not self.connected:
+            return
+        try:
             failed = await self._send_rests()
             if failed:
                 raise ControllerError("REST failed: " + "; ".join(failed))
+        except Exception:
+            self.actuators = previous
+            await self._resend_rests()
+            raise
+        except BaseException:
+            self.actuators = previous
+            raise
+
+    async def _resend_rests(self) -> None:
+        """Best effort: put the firmware back on the current rests after a failed configure."""
+        if not self.connected:
+            return  # the connect sequence sends them
+        try:
+            await self._send_rests()
+        except ControllerError:
+            log.exception("sending the previous rests again failed")
 
     async def tap(self, button: str) -> None:
         ch, act = self._lookup(button)
@@ -204,6 +224,7 @@ class SerialController:
             baudrate=BAUDRATE,
             timeout=self._io_timeout_s,
             write_timeout=self._io_timeout_s,
+            exclusive=True,  # flock: refuses a port a monitor has open, and vice versa
         )
         try:
             if self._closing:  # close() ran while this thread was opening

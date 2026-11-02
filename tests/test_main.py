@@ -6,6 +6,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -489,3 +490,51 @@ async def test_sound_player_cancel_stops_device_off_the_event_loop(
         await asyncio.sleep(0.001)
     assert device.playing.is_set()
     assert stop_thread[0] is not loop_thread  # a hung PortAudio cannot block the SPREKEN release
+
+
+# dashboard banner, SPREKEN rest guard (final review)
+
+
+def _banner_engine(error: str | None = None, skipped: int = 0) -> SimpleNamespace:
+    return SimpleNamespace(source_error=error, source_skipped=skipped)
+
+
+def test_banner_empty_when_all_is_well() -> None:
+    assert view.banner_text(_banner_engine()) is None
+
+
+def test_banner_shows_error_and_skipped_count() -> None:
+    assert view.banner_text(_banner_engine("boom")) == "Schedule source error: boom"
+    assert "2 time blocks" in view.banner_text(_banner_engine(skipped=2))
+    both = view.banner_text(_banner_engine("boom", 1))
+    assert "boom" in both and "1 time block " in both
+
+
+def test_safe_spreken_rest() -> None:
+    assert view.safe_spreken_rest(135, 65, 130) == 135
+    assert view.safe_spreken_rest(75, 65, 130) == 75  # exactly the minimum: allowed
+    assert view.safe_spreken_rest(70, 65, 130) == 130  # too close: the saved rest
+    assert view.safe_spreken_rest(65, 65, 130) == 130
+
+
+async def test_apply_config_refuses_spreken_rest_near_press_and_bad_halls(tmp_path: Path) -> None:
+    class FakeEngine:
+        def __init__(self) -> None:
+            self.cfg = make_cfg()
+            self.reloaded: list[Config] = []
+
+        async def reload_config(self, cfg: Config) -> None:
+            self.reloaded.append(cfg)
+
+    engine = FakeEngine()
+    path = tmp_path / "config.toml"
+
+    def near(cfg: Config) -> None:
+        cfg.actuators["SPREKEN"].rest = cfg.actuators["SPREKEN"].press + 5
+
+    def no_halls(cfg: Config) -> None:
+        cfg.announce.halls = []
+
+    assert "SPREKEN" in (await view.apply_config(engine, path, near))
+    assert "at least one" in (await view.apply_config(engine, path, no_halls))
+    assert engine.reloaded == [] and not path.exists()

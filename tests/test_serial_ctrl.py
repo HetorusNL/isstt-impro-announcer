@@ -157,6 +157,7 @@ async def test_connect_sends_rest_for_each_actuator(port: FakePort) -> None:
         opened = port.opens[0]
         assert opened["port"] == "/dev/fake" and opened["baudrate"] == 115200
         assert 0 < opened["timeout"] <= 0.5 and 0 < opened["write_timeout"] <= 0.5
+        assert opened["exclusive"] is True
     finally:
         await ctrl.close()
 
@@ -552,5 +553,49 @@ async def test_session_on_serial_fails_when_board_reports_maxhold(port: FakePort
         with pytest.raises(ControllerError, match="EVT MAXHOLD 3"):
             await run_session(ctrl, SilentPlayer(), clock, cfg, ("SC1",), [Path("x.wav")])
         assert port.commands()[-1] == "RELEASE 3"
+    finally:
+        await ctrl.close()
+
+
+# configure restores on failure (final review)
+
+
+async def test_configure_restores_actuators_when_rest_refused(port: FakePort) -> None:
+    ctrl = make(port, keepalive_ms=10_000)
+    await ctrl.connect()
+    try:
+        new = {
+            "SC1": Actuator(channel=0, rest=95, press=60),
+            "SPREKEN": Actuator(channel=3, rest=85, press=50),
+        }
+        port.errors["REST 3 85"] = "degrees"
+        with pytest.raises(ControllerError, match="REST failed"):
+            await ctrl.configure(new)
+        assert ctrl.actuators == ACTUATORS
+        assert port.rests == {0: 90, 3: 80}  # the firmware got the old rests back too
+    finally:
+        await ctrl.close()
+
+
+async def test_configure_restores_actuators_when_link_lost(port: FakePort) -> None:
+    ctrl = make(port, keepalive_ms=10_000)
+    await ctrl.connect()
+    try:
+        port.silent = True
+        with pytest.raises(ControllerError):
+            await ctrl.configure({"SC1": Actuator(channel=0, rest=95, press=60)})
+        assert ctrl.actuators == ACTUATORS
+        assert not ctrl.connected
+    finally:
+        await ctrl.close()
+
+
+async def test_configure_success_keeps_new_actuators(port: FakePort) -> None:
+    ctrl = make(port, keepalive_ms=10_000)
+    await ctrl.connect()
+    try:
+        new = {"SC1": Actuator(channel=0, rest=95, press=60)}
+        await ctrl.configure(new)
+        assert ctrl.actuators == new
     finally:
         await ctrl.close()

@@ -851,3 +851,16 @@ async def test_interrupted_hold_is_failed_and_can_be_played_again(tmp_path):
         assert engine.history[-1].status == "played"
     finally:
         await engine.stop()
+
+
+async def test_skipped_blocks_of_the_source_are_exposed(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    source = SwitchSource([match(at(9, 0))])
+    source.skipped_blocks = 2
+    engine = rig.engine(source)
+    await engine.start()
+    try:
+        assert engine.source_skipped == 2
+        assert engine.matches_count == 1
+    finally:
+        await engine.stop()

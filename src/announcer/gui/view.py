@@ -13,7 +13,7 @@ from typing import Any, Protocol
 
 from announcer import config
 from announcer.audio.player import SoundPlayer
-from announcer.config import Config, ConfigError
+from announcer.config import MIN_SPREKEN_TRAVEL_DEG, Config, ConfigError
 from announcer.engine import HistoryEntry, Key
 from announcer.model import Session
 from announcer.sequencer import SPREKEN
@@ -94,6 +94,29 @@ def history_rows(history: Sequence[HistoryEntry]) -> list[HistoryRow]:
 def list_signature(engine: Any, upcoming_limit: int) -> tuple[Any, ...]:
     """Changes whenever the dashboard lists need rebuilding."""
     return (len(engine.history), tuple(engine.upcoming[:upcoming_limit]), engine.current)
+
+
+def banner_text(engine: Any) -> str | None:
+    """The red dashboard banner: schedule source trouble, or None."""
+    parts = []
+    if engine.source_error is not None:
+        parts.append(f"Schedule source error: {engine.source_error}")
+    if engine.source_skipped:
+        n = engine.source_skipped
+        parts.append(
+            f"{n} time block{'s' if n != 1 else ''} could not be read from the schedule "
+            "page: those matches are NOT planned"
+        )
+    return " | ".join(parts) or None
+
+
+def safe_spreken_rest(rest: int, press: int, saved_rest: int) -> int:
+    """The rest for a SPREKEN calibration move: too close to press counts as a press.
+
+    Calibrator.jog then returns the servo to the saved rest shortly after, instead of
+    leaving SPREKEN down because a slider called that position rest.
+    """
+    return rest if abs(rest - press) >= MIN_SPREKEN_TRAVEL_DEG else saved_rest
 
 
 def desk_busy(engine: Any) -> bool:

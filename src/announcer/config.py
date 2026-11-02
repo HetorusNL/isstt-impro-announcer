@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import string
 import tomllib
 from dataclasses import asdict, dataclass, field, fields
@@ -10,7 +11,7 @@ from typing import Any, Literal
 
 import tomli_w
 
-FORBIDDEN_BUTTONS = {"ONTRUIMINGSALARM", "KOPPEL_RUIMTES", "KOPPELRUIMTES"}
+FORBIDDEN_NAME_PARTS = ("KOPPEL", "ONTRUIM", "ALARM")  # must never get an actuator
 ALLOWED_PLACEHOLDERS = {"time", "count", "fields", "halls"}
 REQUIRED_MESSAGES = ("match_start", "match_end")
 # sample values with the same types as planner.render_message, for a trial render
@@ -20,6 +21,7 @@ MAX_CHANNEL = 7
 # firmware limits (firmware/PROTOCOL.md): WATCHDOG and MAXHOLD caps
 MAX_WATCHDOG_MS = 10_000
 MAX_MAXHOLD_MS = 120_000
+MIN_SPREKEN_TRAVEL_DEG = 10  # a SPREKEN rest closer to press than this may keep it pressed
 
 
 class ConfigError(Exception):
@@ -118,6 +120,24 @@ def _check_template(name: str, template: str) -> None:
         raise ConfigError(f"message {name!r} cannot be rendered: {e}") from e
 
 
+def _is_forbidden(name: str) -> bool:
+    normalised = re.sub(r"[^A-Z0-9]", "", name.upper())
+    return any(part in normalised for part in FORBIDDEN_NAME_PARTS)
+
+
+def _check_halls(cfg: Config) -> None:
+    halls = cfg.announce.halls
+    if not halls:
+        raise ConfigError("select at least one hall to announce in")
+    if len(set(halls)) != len(halls):
+        raise ConfigError(f"a hall is listed more than once: {halls}")
+    for hall in halls:
+        if hall == "SPREKEN":
+            raise ConfigError("SPREKEN is not a hall")
+        if hall not in cfg.actuators:
+            raise ConfigError(f"hall {hall!r} has no actuator")
+
+
 def validate(cfg: Config) -> None:
     # controller
     c = cfg.controller
@@ -133,7 +153,7 @@ def validate(cfg: Config) -> None:
     # actuators
     channels: dict[int, str] = {}
     for name, act in cfg.actuators.items():
-        if name.upper() in FORBIDDEN_BUTTONS:
+        if _is_forbidden(name):
             raise ConfigError(f"actuator {name!r} is forbidden (must never be pressed)")
         for attr in ("rest", "press"):
             value = getattr(act, attr)
@@ -151,9 +171,13 @@ def validate(cfg: Config) -> None:
         channels[act.channel] = name
     if "SPREKEN" not in cfg.actuators:
         raise ConfigError("actuator 'SPREKEN' is required")
-    for hall in cfg.announce.halls:
-        if hall not in cfg.actuators:
-            raise ConfigError(f"hall {hall!r} has no actuator")
+    spreken = cfg.actuators["SPREKEN"]
+    if abs(spreken.rest - spreken.press) < MIN_SPREKEN_TRAVEL_DEG:
+        raise ConfigError(
+            f"SPREKEN rest {spreken.rest} is within {MIN_SPREKEN_TRAVEL_DEG} degrees "
+            f"of press {spreken.press}"
+        )
+    _check_halls(cfg)
     # messages
     for key in REQUIRED_MESSAGES:
         if key not in cfg.messages:

@@ -44,25 +44,35 @@ def _parse_line(li: LexborNode, start: datetime, round_name: str) -> Match | Non
     )
 
 
-def parse_matches_html(html: str, tz: str) -> list[Match]:
+def parse_matches_page(html: str, tz: str) -> tuple[list[Match], int]:
+    """The matches on a page, and how many time blocks were skipped (unparseable moment)."""
     zone = ZoneInfo(tz)
     tree = LexborHTMLParser(html)
     matches: list[Match] = []
+    skipped = 0
     for section in tree.css("section"):
         round_name = _text(section.css_first('h2[class*="roundName"]'))
         for block in section.css('div[class*="__time"]'):
             moment = _text(block.css_first('h3[class*="moment"]'))
             try:
                 start = datetime.strptime(moment, MOMENT_FORMAT).replace(tzinfo=zone)
-            except ValueError as e:
-                raise SourceError(f"unrecognised match time {moment!r}") from e
+            except ValueError:
+                log.warning("skipping a block with unrecognised match time %r", moment)
+                skipped += 1
+                continue
             for li in block.css('li[class*="line"]'):
                 match = _parse_line(li, start, round_name)
                 if match is not None:
                     matches.append(match)
     if not matches:
+        if skipped:
+            raise SourceError(f"could not read any of the {skipped} match times on the page")
         raise SourceError("no matches found on the page (did the site change?)")
-    return matches
+    return matches, skipped
+
+
+def parse_matches_html(html: str, tz: str) -> list[Match]:
+    return parse_matches_page(html, tz)[0]
 
 
 class CupkitSource:
@@ -75,6 +85,7 @@ class CupkitSource:
         self._urls = list(matches_urls)
         self._tz = tz
         self._client = client
+        self.skipped_blocks = 0  # time blocks skipped in the last successful fetch
 
     async def _get(self, client: httpx.AsyncClient, url: str) -> str:
         try:
@@ -93,6 +104,10 @@ class CupkitSource:
         else:
             async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
                 pages = [await self._get(client, url) for url in self._urls]
+        skipped = 0
         for page in pages:
-            matches.extend(parse_matches_html(page, self._tz))
+            page_matches, page_skipped = parse_matches_page(page, self._tz)
+            matches.extend(page_matches)
+            skipped += page_skipped
+        self.skipped_blocks = skipped
         return matches

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import pytest
 
-from announcer.schedule.cupkit import CupkitSource, parse_matches_html
+from announcer.schedule.cupkit import CupkitSource, parse_matches_html, parse_matches_page
 from announcer.schedule.source import SourceError
 
 FIXTURE = Path(__file__).parent.parent / "docs" / "reference" / "cupkit-public-matches.html"
@@ -79,3 +79,53 @@ def test_malformed_line_is_logged_and_skipped(caplog):
         ms = parse_matches_html(html, TZ)
     assert len(ms) == 1
     assert any("Field 2" in r.getMessage() for r in caplog.records)
+
+
+def _block(moment: str, field: str = "Field 1") -> str:
+    return (
+        f'<div class="x__time"><h3 class="x__moment">{moment}</h3><ul>'
+        f'<li class="x__line"><span class="x__where">SC1, {field} · Poule A</span>'
+        '<span class="x__side">A1</span><span class="x__side">A4</span>'
+        '<span class="x__referee">Referee: E1</span></li></ul></div>'
+    )
+
+
+def _page(*blocks: str) -> str:
+    return f'<section><h2 class="x__roundName">Round 1</h2>{"".join(blocks)}</section>'
+
+
+GOOD = "18 December 2026 at 09:00"
+
+
+def test_one_unparseable_moment_skips_only_that_block(caplog):
+    html = _page(_block(GOOD), _block("sometime soon", "Field 2"))
+    with caplog.at_level("WARNING", logger="announcer.schedule.cupkit"):
+        matches, skipped = parse_matches_page(html, TZ)
+    assert [m.field for m in matches] == ["Field 1"]
+    assert skipped == 1
+    assert "sometime soon" in caplog.text
+
+
+def test_every_moment_unparseable_is_source_error():
+    with pytest.raises(SourceError, match="2 match times"):
+        parse_matches_page(_page(_block("soon"), _block("later")), TZ)
+
+
+async def test_cupkit_source_counts_skipped_blocks_over_urls():
+    pages = {
+        "https://x.test/a": _page(_block(GOOD), _block("soon")),
+        "https://x.test/b": _page(_block(GOOD), _block("later"), _block("never")),
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=pages[str(request.url)])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        source = CupkitSource(list(pages), TZ, client=client)
+        assert source.skipped_blocks == 0
+        assert len(await source.fetch()) == 2
+        assert source.skipped_blocks == 3
+        pages["https://x.test/a"] = _page(_block(GOOD))
+        pages["https://x.test/b"] = _page(_block(GOOD))
+        await source.fetch()
+        assert source.skipped_blocks == 0

@@ -94,6 +94,7 @@ class Engine:
         self.history: list[HistoryEntry] = []
         self.source_ok_at: datetime | None = None
         self.source_error: str | None = None
+        self.source_skipped = 0  # time blocks the source could not read in its last fetch
         self.matches_count = 0
 
         self._matches: list[Match] = []
@@ -262,6 +263,7 @@ class Engine:
         self._set_matches(matches)
         self.source_ok_at = self._clock.now()
         self.source_error = None
+        self.source_skipped = getattr(self._source, "skipped_blocks", 0)
 
     async def _poll_loop(self) -> None:
         while True:

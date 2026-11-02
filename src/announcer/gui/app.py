@@ -167,8 +167,8 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
             )
             event.text = f"Last board event: {rt.ctrl.last_event}"
             event.visible = rt.ctrl.last_event is not None
-            banner.text = f"Schedule source error: {engine.source_error}"
-            banner.visible = engine.source_error is not None
+            banner.text = view.banner_text(engine) or ""
+            banner.visible = bool(banner.text)
             source.text = (
                 f"Schedule: {engine.matches_count} matches, last fetched "
                 f"{view.fmt_age(now, engine.source_ok_at)}"
@@ -261,11 +261,15 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 ui.notify(f"{what} failed: {e!r}", type="negative")
 
         def jog(name: str, slider: str, angle: float | None) -> None:
-            rest = sliders[name][1]
-            if angle is None or rest.value is None:
+            press, rest = sliders[name]
+            if angle is None or rest.value is None or press.value is None:
                 return
             # moving the rest slider moves to rest; the press slider presses
             target_rest = int(angle) if slider == "rest" else int(rest.value)
+            if name == SPREKEN:
+                target_rest = view.safe_spreken_rest(
+                    target_rest, int(press.value), engine.cfg.actuators[SPREKEN].rest
+                )
             if not cal.jog(name, int(angle), target_rest):
                 refused()
 
