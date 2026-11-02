@@ -25,23 +25,23 @@ Numbers for the rig (squeeze, gauge, pull force) live in [`hardware/cad/README.m
 
 ### 0.1 Before power-on
 
-- [ ] **Rest and press first.** Open `config.toml` and set, for the four actuators, `rest` to about 135 and `press` to a safe angle close to it, for example 120. The real press angle comes from calibration in section 2. PASS: `rest` is not 90 and `press` is not 60 in `config.toml`. See "Cam calibration" in the README.
+- [ ] **Rest and press first.** Open `config.toml` and set, for the four actuators, `rest` to about 135 and `press` to a safe angle close to it, for example 120. The real press angle comes from calibration in section 2. PASS: `rest` is not 90 and `press` is not 60 in `config.toml`. See "Cam calibration" in the CAD README (`hardware/cad/README.md`).
 - [ ] **Plungers out** until one connect with the final rest has happened (section 1), unless the last bench step in the [README](../README.md#last-bench-step) was done with this rest. The firmware drives the servos to the rest in its flash at power-on, before the host sends any config, and the cam at rest 90 holds the plunger about 1.5 mm into the button travel. PASS: no plunger in a guide, or the bench step is ticked here: ____
 - [ ] **Speaker power** is the separate USB wall charger, not the laptop and not the servo rail. PASS: speaker on, no hum.
 
 ### 0.2 Mount the frame and set the squeeze
 
-- [ ] Mount the frame on the desk. Set the squeeze with the tensioner **with the stop collars fitted**, then check with the go/no-go gauge: "Setting the squeeze" in the README.
+- [ ] Mount the frame on the desk. Set the squeeze with the tensioner **with the stop collars fitted**, then check with the go/no-go gauge: "Setting the squeeze" in the CAD README (`hardware/cad/README.md`).
   - PASS: the GO blade fits and the NO blade does not, at the front and back edge of both posts.
   - **Never run a push bolt without its collar.** The collar is what stops the jaw plastic reaching the case.
-- [ ] **Upward pull test.** Pull the frame up with a spring scale (or a weighed pull) to at least 2x the measured press force. PASS: it does not lift or slip. Repeat after the rig has been clamped for some hours. If the foam has relaxed, redo the squeeze (foam take-up in the README).
+- [ ] **Upward pull test.** Pull the frame up with a spring scale (or a weighed pull) to at least 2x the measured press force. PASS: it does not lift or slip. Repeat after the rig has been clamped for some hours. If the foam has relaxed, redo the squeeze (foam take-up in the CAD README (`hardware/cad/README.md`)).
 
 ### 0.3 Covers reachable
 
 - [ ] **Fit the rest of the rig first:** the modules on the rail (plungers still out, see 0.1), the speaker holder and speaker on the gooseneck, the mic where it will stay, and the servo leads along their route. The checks below only count with all of it in place. PASS: nothing is left to fit.
-- [ ] **Alarm cover.** Sit at the operator position. With one hand, open the real *Ontruimingsalarm* cover and reach the button. PASS: you can, without touching the rig. FAIL: STOP. Do not run the rig on the desk; use the fallback in the README ("Cover, real desk"). This is unproven until done on site.
+- [ ] **Alarm cover.** Sit at the operator position. With one hand, open the real *Ontruimingsalarm* cover and reach the button. PASS: you can, without touching the rig. FAIL: STOP. Do not run the rig on the desk; use the fallback in the CAD README (`hardware/cad/README.md`) ("Cover, real desk"). This is unproven until done on site.
 - [ ] **Koppel cover.** Same, for *Koppel ruimtes*. PASS or STOP, as above.
-- [ ] **Hand volume.** The speaker, holder, mic and all servo leads (also after the gooseneck sags) stay out of the volume above both covers. Servo leads follow the routing rule in `wiring.md`. PASS: nothing in that volume. Write the allowed mic position here: ____________________ (mic distance to the speaker driver face as in the README, "Speaker holder").
+- [ ] **Hand volume.** The speaker, holder, mic and all servo leads (also after the gooseneck sags) stay out of the volume above both covers. Servo leads follow the routing rule in `wiring.md`. PASS: nothing in that volume. Write the allowed mic position here: ____________________ (mic distance to the speaker driver face as in the CAD README (`hardware/cad/README.md`), "Speaker holder").
 - [ ] **Gooseneck sag.** Leave the speaker on the gooseneck for a while (suggestion: 10 minutes). PASS: it does not drop towards the covers or away from the mic.
 
 ### 0.4 Spreken must release (do after section 3, once the GUI is up)
@@ -51,7 +51,7 @@ Run these with the real rig on the real SPREKEN button. After each one, turn any
 - [ ] **Hold to talk.** Manual page, hold "Hold to talk" for a few seconds, then let go. PASS: the SPREKEN button comes up as soon as you let go (suggestion: under a second) and the Manual page status clears.
 - [ ] **Emergency stop during a hold.** Open the Dashboard in a second tab. On the Calibration page click **Test full sequence**, switch to the Dashboard, and click **EMERGENCY STOP** while SPREKEN is held. (Not with Hold to talk and a mouse: moving the pointer off that button already ends the talk.) PASS: the servo returns to rest at once, the Dashboard says `EMERGENCY STOP: PAUSED`, the session shows FAILED (emergency stop) with "play now", and nothing fires until you click **Resume**. Evidence so far (not the real rig): driven through the NiceGUI socket with `--mock` on 2026-11-02, `release_all` logged within 1 ms of the click, then the session's own `release SPREKEN`, then a second `release_all`. The next session did not fire until Resume. The real-servo part is untested until you do this.
 - [ ] Pause alone releases nothing and does not end a hold or a running session. "Release all" on the Calibration page is refused while a session or talk is running. Use EMERGENCY STOP.
-- [ ] **Ctrl+C during a hold.** Hold "Hold to talk", then press Ctrl+C in the terminal. PASS: the servo returns to rest and the program exits. Evidence so far (not the real rig): the final review drove Hold to talk through the NiceGUI socket with `--mock`; SIGINT reached `release SPREKEN` in about 80 ms and `release_all` in about 180 ms. Still untested on real servos.
+- [ ] **Ctrl+C during a hold.** Click **Test full sequence** and press Ctrl+C in the terminal while SPREKEN is held (with Hold to talk the mouse and keyboard focus stay in the browser). PASS: the servo returns to rest and the program exits. Start `announcer` again for the next test, then turn zone lights off by hand. Evidence so far (not the real rig): the final review drove Hold to talk through the NiceGUI socket with `--mock`; SIGINT reached `release SPREKEN` in about 80 ms and `release_all` in about 180 ms. Still untested on real servos.
 - [ ] **Unplug USB during a hold.** Hold "Hold to talk", then pull the laptop USB cable from the Nucleo. PASS: the servo is back at rest within 2 s (firmware watchdog). Plug it back in and confirm the dashboard says "controller connected" again.
 - [ ] **Max hold, GUI side.** Hold "Hold to talk" past `max_hold_s` (60 s in `config.example.toml`) without letting go. PASS: the host ends the talk and releases SPREKEN at that time (log: `talk reached max hold`). This is the host limit, not the firmware one.
 - [ ] **Firmware max hold: bench only, replica.** The GUI cannot trigger it, because the host releases first. Stop the announcer: it locks the port. Run `pio device monitor -d firmware --echo` (commands in `firmware/PROTOCOL.md`), then `MAXHOLD 5000`, `ANGLE 3 <press angle>`, and keep sending `PING` lines. If `ANGLE` answers `ERR no rest`, send `REST 3 <rest>` first. PASS: `EVT MAXHOLD 3` after about 5 s and the servo is at rest, although the keep-alives continue. Channel 3 is SPREKEN in `config.example.toml`. Restart the announcer afterwards so the configured MAXHOLD is back.
@@ -62,7 +62,7 @@ Run these with the real rig on the real SPREKEN button. After each one, turn any
 
 - [ ] Bench-test it on the replica: pull the adapter during a Spreken hold. Result: ____________________
 - [ ] Put the adapter and the desk on **one power strip** where possible. This covers mains loss only, not a pulled plug or a failed adapter.
-- [ ] **Manual recovery** if SPREKEN is stuck down: either lift the whole frame straight up off the desk with both hands (it is held by clamp friction; the README's estimate is about 33 N per side, under "Clamp grip", so measure the real pull first), or free just that button: loosen the module's height bolt with a hex key through the bracket slot (assembly step 8 in the README) and slide the bracket up the carriage until the plunger is clear of the cap. The module route has only +6 mm of height travel and is **unproven: try it on the bench first**, and do not count on it until it has worked. PASS: the button comes up and the PA stops transmitting. Practise both on the replica first.
+- [ ] **Manual recovery** if SPREKEN is stuck down: either lift the whole frame straight up off the desk with both hands (it is held by clamp friction; the CAD README (`hardware/cad/README.md`)'s estimate is about 33 N per side, under "Clamp grip", so measure the real pull first), or free just that button: loosen the module's height bolt with a hex key through the bracket slot (assembly step 8 in the CAD README (`hardware/cad/README.md`)) and slide the bracket up the carriage until the plunger is clear of the cap. The module route has only +6 mm of height travel and is **unproven: try it on the bench first**, and do not count on it until it has worked. PASS: the button comes up and the PA stops transmitting. Practise both on the replica first.
 
 ## 1. Power up and connect
 
@@ -71,7 +71,7 @@ Run these with the real rig on the real SPREKEN button. After each one, turn any
 - [ ] Start: `uv run announcer` in `/datim/repos/isstt-impro-announcer`, then open `http://127.0.0.1:8080`. **The app starts RUNNING.** If setup overruns into a real announcement, click **Pause** first.
 - [ ] PASS: the terminal logs `controller connected on` and the Dashboard header shows **controller connected**. FAIL (`CONTROLLER DISCONNECTED`): check the cable and `controller.port` in `config.toml`, and that no `pio device monitor` has the port open.
 - [ ] PASS: all four servos sit at rest and no button is pressed.
-- [ ] That was the connect with the final rest: now put the plungers in, with the dot in the tip, if they were out.
+- [ ] That was the connect with the final rest. If the plungers were out: take the cam off (the plunger cannot get past it), drop the plunger in with the dot in the tip, and refit the cam at the angle in the CAD README, "Cam calibration". Then do the module height again.
 
 ## 2. Calibrate each servo (Calibration page)
 
@@ -104,7 +104,7 @@ Then:
 
 - [ ] **All zone lights off, by hand if needed.** Zones are toggles, and Test tap, Hold to talk and the stops in 0.4 can leave them on. A session that starts with a light on turns that zone off. PASS: no zone light on.
 - [ ] **Do-not-disturb on** in the desktop, so no notification sound can reach the mic. PASS: `notify-send test` makes no sound and no popup.
-- [ ] Dashboard is RUNNING (the Calibration test does not play while PAUSED). The speaker is aimed at the mic at the distance in the README.
+- [ ] Dashboard is RUNNING (the Calibration test does not play while PAUSED). The speaker is aimed at the mic at the distance in the CAD README (`hardware/cad/README.md`).
 - [ ] Click **Save**, then **Test full sequence** ("This is a test announcement."). PASS: the halls tap, SPREKEN is held through the chime and the speech, then released.
 - [ ] Walk to a hall. PASS: the test is audible and clear. If not, change **volume** or the speaker distance, **Save** and test again. Both speaker channels play mono speech, which is expected.
 - [ ] Listen for hum from the speaker. PASS: none.
@@ -119,7 +119,7 @@ Then:
 The schedule is not fixed: it changes as teams register. There is no expected match count. Check this now, and again each morning.
 
 - [ ] Dashboard, "Schedule:" line. PASS: no red banner (a source error, or time blocks that could not be read), and "last fetched" is recent (suggestion: within a couple of poll intervals, `poll_seconds` is 60).
-- [ ] Open the current Cupkit page next to the Dashboard. PASS: the matches count, the first and the last times in "Upcoming" match the page, including the date. Times show as start and due: `Sat 08:59:55 (due 09:00:00)`, where due is the listed time.
+- [ ] Open the current Cupkit page next to the Dashboard. PASS: the matches count and the first time in "Upcoming" match the page, including the date. "Upcoming" lists only the next 15 sessions, so read the last time from `state/schedule.json`. Times show as start and due: `Sat 08:59:55 (due 09:00:00)`, where due is the listed time.
 - [ ] Settings page: the halls are the ones to announce in, and the match minutes per round are right. **Save**. PASS: green message, and the end times in "Upcoming" follow.
 
 ## 6. Laptop
@@ -150,11 +150,16 @@ The schedule is not fixed: it changes as teams register. There is no expected ma
 - [ ] If the Dashboard says PAUSED, click **Resume**. Do this **before the first session's start time** in "Next:". PASS: green "RUNNING".
 - [ ] Final glance: controller connected, no red banner, covers reachable, mic and speaker where recorded in 0.3.
 
+### End of Saturday
+
+- [ ] All zone lights off, by hand if needed.
+- [ ] Ctrl+C the announcer for the night. PASS: the log says `engine stopped, controller released`.
+
 ## 10. Sunday morning
 
 The schedule spans both days, and what was already played or skipped is kept in `state/`, so a restart is safe.
 
-- [ ] Pull test again by hand, and the squeeze gauge. If the foam relaxed overnight, redo the squeeze (foam take-up in the README).
+- [ ] Pull test again by hand, and the squeeze gauge. If the foam relaxed overnight, redo the squeeze (foam take-up in the CAD README (`hardware/cad/README.md`)).
 - [ ] Gooseneck and mic at the position recorded in 0.3. Speaker on its charger.
 - [ ] Do the steps of section 9 again, from the power order down.
 - [ ] Dashboard history after the start: anything MISSED that you did not expect? "Play now" is there if it still makes sense.
