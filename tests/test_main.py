@@ -191,6 +191,36 @@ def test_inhibitor_missing_warns_and_continues(
     assert "systemd-inhibit" in caplog.text
 
 
+def test_inhibitor_helper_dies_when_app_is_killed() -> None:
+    # A killed app runs no cleanup, and a helper left behind blocks the lid until reboot.
+    app = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import time\n"
+            "from announcer import inhibit\n"
+            "inhibit.COMMAND = ['sleep', '300']\n"
+            "with inhibit.Inhibitor() as i:\n"
+            "    print(i._proc.pid, flush=True)\n"
+            "    time.sleep(300)\n",
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    assert app.stdout is not None
+    helper = int(app.stdout.readline())
+    try:
+        app.kill()
+        app.wait()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and Path(f"/proc/{helper}").exists():
+            time.sleep(0.05)
+        assert not Path(f"/proc/{helper}").exists(), "helper outlived the killed app"
+    finally:
+        app.stdout.close()
+        subprocess.run(["kill", "-9", str(helper)], capture_output=True)
+
+
 # GUI helpers
 
 

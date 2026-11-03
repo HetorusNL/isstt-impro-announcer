@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import ctypes
 import logging
+import os
+import signal
 import subprocess
+from functools import partial
 from types import TracebackType
 from typing import Self
 
@@ -18,6 +22,17 @@ COMMAND = [
     "infinity",
 ]
 STOP_TIMEOUT_S = 5.0
+PR_SET_PDEATHSIG = 1
+
+_LIBC = ctypes.CDLL(None)  # loaded here: the forked child must not load libraries
+
+
+def _die_with_parent(parent: int) -> None:
+    """Runs in the helper before exec. A killed app runs no cleanup, and a helper left
+    behind would block sleep and the lid until reboot."""
+    _LIBC.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
+    if os.getppid() != parent:  # the app died before the line above took effect
+        os._exit(1)
 
 
 class Inhibitor:
@@ -33,8 +48,9 @@ class Inhibitor:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                preexec_fn=partial(_die_with_parent, os.getpid()),
             )
-        except OSError as e:
+        except (OSError, subprocess.SubprocessError) as e:
             log.warning("cannot run systemd-inhibit (%s): the laptop may go to sleep", e)
         return self
 
