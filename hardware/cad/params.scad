@@ -173,6 +173,7 @@ bracket_t = 3;          // ESTIMATE measure: corner bracket leg thickness (the b
 key_short_arm = 20;     // ESTIMATE measure: L-key for the bracket's M4x8 bolts (2.5 or 3 mm, unconfirmed), short arm length including the long arm's thickness
 key_engage = 2.5;       // ESTIMATE measure: how far the key goes into the button head
 ten_collar_d = 9.5;     // stop collar outer diameter
+ten_collar_steps = [-0.4, -0.2, 0, 0.2]; // printed collar set, relative to the nominal thickness: thinner squeezes more
 ten_membrane = 0.2;     // printed skin closing the shoulder hole so the shoulder bridges cleanly; drill it out
 ten_neck = 16;          // tensioner neck length along the rail
 ten_w = 20;             // tensioner width (Y)
@@ -303,7 +304,8 @@ assert(cam_r - arm_len >= horn_hub_d / 2 + 0.15 + 0.4, "cam wall around the horn
 assert(pad_squeeze <= 0.6 * (pad_t - pad_pocket), "pad_squeeze too close to jaw plastic touching the case");
 assert(ten_travel >= 2 * pad_squeeze, "tensioner travel too short for the squeeze");
 assert(ten_travel - ten_collar_t < pad_t - pad_pocket - 0.3, "stop collar lets the jaw plastic reach the case");
-assert(ten_collar_t >= 1.2, "stop collar too thin to print");
+assert(ten_collar_t + min(ten_collar_steps) >= 1.2, "thinnest stop collar too thin to print");
+assert(ten_travel - ten_collar_t - min(ten_collar_steps) <= pad_t - pad_pocket - 0.2, "thinnest stop collar lets the jaw plastic reach the case");
 assert(bracket_key_clearance >= 1, "hex key cannot reach the outer corner bracket's rail bolt");
 assert(gauge_go >= post_gap_contact + 0.2, "go blade would pass with the jaw plastic touching");
 assert(gauge_nogo <= post_gap_uncompressed - 0.2, "no-go blade would pass with the pad uncompressed");

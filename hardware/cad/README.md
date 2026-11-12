@@ -15,7 +15,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | `servo_plunger.scad` | Plunger between cam and button | 4 + spare |
 | `tensioner_block.scad` | Tensioner block on the rail outside each post, for both sides (the same part turned 180 degrees) | 2 |
 | `tensioner_pad.scad` | Tensioner pressure pad, bridges the slot in the post | 2 |
-| `tensioner_collar.scad` | Stop collar under the push bolt head, sets the squeeze | 2 + spare |
+| `tensioner_collar.scad` | Stop collars under the push bolt head, set the squeeze. One plate: 2 each of 1.8, 2.0, 2.2 and 2.4 mm | 1 plate |
 | `squeeze_gauge.scad` | Go/no-go feeler gauge for the post gap, one for both sides | 1 |
 | `end_cap.scad` | Press-fit end cap: 2 rail ends, 2 post bottoms | 4 + spare |
 | `speaker_cradle.scad` | ER-151 cradle, arm and fixed half of the tube clamp | 1 |
@@ -38,7 +38,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | Infill | 40 % gyroid | 15 % |
 | Supports | None. See the tensioner block note | Only for `speaker_cradle.scad`, under the cups |
 
-Print the tensioner block standing on its outer end, as its file lays it out. Slicing it shows three short bridges and no other overhang: the shoulder over the head slot (10.7 mm), the ceiling of the T-nut pocket (10.6 mm), and the top of the horizontal rail bolt hole (about 6 mm). The shoulder carries the push load, and it bends along its bridge strands, which is the strong direction. It has a 0.2 mm skin closing the bolt hole so the bridge prints whole: drill it out with a 5.5 mm drill (`m5_clear`). Check the collar thickness with calipers: it should be 2.2 mm, at 0.2 mm layers.
+Print the tensioner block standing on its outer end, as its file lays it out. Slicing it shows three short bridges and no other overhang: the shoulder over the head slot (10.7 mm), the ceiling of the T-nut pocket (10.6 mm), and the top of the horizontal rail bolt hole (about 6 mm). The shoulder carries the push load, and it bends along its bridge strands, which is the strong direction. It has a 0.2 mm skin closing the bolt hole so the bridge prints whole: drill it out with a 5.5 mm drill (`m5_clear`). Check the collar thicknesses with calipers. The nominal collar is 2.2 mm and has no notch. Each notch on the rim means 0.2 mm thinner (2.0 and 1.8 mm), and a flat on the rim marks the 2.4 mm one.
 
 Print the gauge as laid out, so the blade thickness is in the print plane. Check both blades with calipers: go 10.45 mm, no-go 11.05 mm. If one is more than 0.1 mm off, sand it or reprint.
 
@@ -94,7 +94,7 @@ The side pads and tip dots stay in by the press fit. The under-lip pad hangs ups
 2. Join each post's top end to the rail's bottom face with 2 corner brackets, one on each side of the post, with the M4x8 bolts. Tighten the bolts into the post. Leave the bolts into the rail loose, so the posts slide along the rail. The bracket's centring lips sit in the slot, so a loose bracket still slides along the rail.
 3. Press the end caps into the rail ends and post bottoms.
 4. Bolt a jaw to each post's inner face with 2 M5x10, key in the slot, then push in the pads. No adhesive. The pad covers the bolt heads, so take it out to adjust the jaw.
-5. Tensioner, one per side: drill out the skin in the shoulder hole. Slide a T-nut into the block's pocket. Put the stop collar on an M5x10 under its head, and thread the bolt through the shoulder into the nut. Put the pad's stub in the socket. Bolt the block to the rail's bottom slot with an M5x10, key in the slot, with a key's long arm up through the head slot. Keep it loose for now.
+5. Tensioner, one per side: drill out the skin in the shoulder hole. Slide a T-nut into the block's pocket. Put a nominal stop collar (2.2 mm, no notch) on an M5x10 under its head, and thread the bolt through the shoulder into the nut. Put the pad's stub in the socket. Bolt the block to the rail's bottom slot with an M5x10, key in the slot, with a key's long arm up through the head slot. Keep it loose for now.
 6. Set the squeeze, without the modules. See "Setting the squeeze".
 7. Module: trim a stock single horn to `horn_stub` (7.5 mm from the axis). Drop the plunger into the guide from above, with the dot in its tip. Fit the servo from the back with the ears on the back face and the servo's own screws. Fit the horn and the cam with the horn screw. If that screw is too short with the cam fitted, use M2x8: check on one servo first.
 8. Carriage on rail: M5x10 into a T-nut, key in the slot. Bracket on carriage: M5x10 through the slot into a T-nut in the pocket. The slot also gives a hex key access to the rail bolt, so a module can slide along the rail without taking it apart.
@@ -116,7 +116,7 @@ The clamping force comes from compressing the side pads by `pad_squeeze`, **0.8 
 
 These follow the measured `case_w`, and `frame_assembly.scad` echoes them.
 
-1. Lower the frame over the desk with the lips resting on the rim. The bolts into the rail stay loose, on all 4 corner brackets. The bracket's centring lips sit in the slot: a loose bracket still slides along the rail, which steps 3 and 5 rely on.
+1. Lower the frame over the desk with the lips resting on the rim. The bolts into the rail stay just loose enough to slide, on all 4 corner brackets: snug each one, then back it off about a quarter turn. A looser bracket lets the post tilt, and a tight one stops it sliding. The bracket's centring lips sit in the slot: a loose bracket still slides along the rail, which steps 3 and 5 rely on.
 2. Back off each push bolt by at least one full turn from the collar, and push the pad fully into its block.
 3. Bring each post inward by hand until its pad just touches the case wall: the post stops sliding freely. Do not press into the foam.
 4. Slide each block along the rail until its pad touches the post, without moving the post. Tighten the block's rail bolt with the long arm of a 3 mm hex key, up through the head slot. The handle swings below the block.
@@ -125,12 +125,17 @@ These follow the measured `case_w`, and `frame_assembly.scad` echoes them.
 7. Check with the gauge at the front and back edge of each post. Hold it by the bar, flat face against the case wall, and push a blade gently up from below, between the case wall and the 5 mm of post that sticks out below the jaw. Turn it around for the other side.
    - **The GO blade must fit.** If it does not, the jaw plastic is too close: loosen the brackets and start again from step 2.
    - **The NO blade must not fit.** If it does, the pad is not compressed enough: start again from step 2.
+   - **Same result a second time:** change the collar on that side, one step at a time, and start again from step 2. NO blade fits: one step thinner. GO blade does not fit: one step thicker. Each step is 0.2 mm of squeeze.
 
 If locking moved a post, the gauge shows it. Loosen, correct and measure again. If you have calipers that reach, you can also check the spacing of the post inner faces, 202.4 mm with the estimated `case_w`, just above the jaws and before fitting the modules. That check is optional.
 
-The block only pushes, and the collar touches only the block and the bolt, so the screw cannot pass the limit however hard you turn it, but only with the collar fitted and as long as the start was right. Never run the push bolt without its collar: the collar is what stops the jaw plastic reaching the case.
+The block only pushes, and the collar touches only the block and the bolt, so the screw cannot pass the limit however hard you turn it, but only with the collar fitted and as long as the start was right. Never run the push bolt without a collar: the collar is what stops the screw driving the jaw plastic into the case.
 
-**Foam take-up.** The tensioner stays fitted. If the foam relaxes, repeat the whole procedure from step 1, with the modules still on. The collar then sets 0.8 mm from the pad's new contact. Do not use a thinner collar: that is the one way to overshoot. If the GO blade no longer fits after this, the pad has taken a permanent set: replace it.
+**Why a collar set.** The squeeze depends on the real bolt length (about 0.3 mm either way), on how the block printed, and on how much the block gives under load. Those errors are the same on every attempt, so repeating the procedure does not remove them: a different collar does. On paper the thinnest collar (1.8 mm) gives 1.2 mm, which still leaves 0.3 mm before the jaw plastic touches the case. A touch is not a disaster, but avoid it: the gauge's GO blade is the check.
+
+**Bench check, before the desk.** Assemble one block with its nut, pad, bolt and nominal collar. Back the bolt off and push the pad fully in, then turn the bolt in until the head seats. Measure the gap that opens between the pad's plate and the block's end, with calipers or feeler blades: it should be 0.8 mm. If it is off by 0.2 mm or more, start with the collar that corrects it. This check is without load, so the block's give is not in it: the gauge on the desk has the last word.
+
+**Foam take-up.** The tensioner stays fitted. If the foam relaxes, repeat the whole procedure from step 1, with the modules still on. The collar then sets the same squeeze from the pad's new contact. Keep the collar that passed the gauge: do not go thinner to make up for relaxed foam. If the GO blade no longer fits after this, the pad has taken a permanent set: replace it.
 
 ## Cam calibration
 

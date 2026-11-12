@@ -177,11 +177,18 @@ module tensioner_pad() {
     box(ten_plate_t - 0.01, ten_nut_x0, -ten_stub / 2, ten_stub / 2, -ten_stub / 2, ten_stub / 2);
 }
 
-// Stop collar, on the push bolt under its head. Axis along Z.
-module tensioner_collar() {
+// Stop collar, on the push bolt under its head. Axis along Z. step: thickness relative
+// to nominal. Rim notches tell the set apart: none is nominal, one per 0.2 mm thinner,
+// and a flat marks a thicker one.
+module tensioner_collar(step = 0) {
+    t = ten_collar_t + step;
+    notches = step < 0 ? round(-step / 0.2) : 0;
     difference() {
-        cylinder(d = ten_collar_d, h = ten_collar_t);
-        translate([0, 0, -1]) cylinder(d = m5_clear, h = ten_collar_t + 2);
+        cylinder(d = ten_collar_d, h = t);
+        translate([0, 0, -1]) cylinder(d = m5_clear, h = t + 2);
+        for (i = [0 : 1 : notches - 1]) rotate(i * 40)
+            translate([ten_collar_d / 2 - 0.7, -0.6, -1]) cube([2, 1.2, t + 2]);
+        if (step > 0) translate([ten_collar_d / 2 - 0.7, -ten_collar_d, -1]) cube([2, 2 * ten_collar_d, t + 2]);
     }
 }
 

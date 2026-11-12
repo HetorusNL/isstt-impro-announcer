@@ -33,7 +33,7 @@ Numbers for the rig (squeeze, gauge, pull force) live in [`hardware/cad/README.m
 
 - [ ] Mount the frame on the desk. Set the squeeze with the tensioner **with the stop collars fitted**, then check with the go/no-go gauge: "Setting the squeeze" in the CAD README (`hardware/cad/README.md`).
   - PASS: the GO blade fits and the NO blade does not, at the front and back edge of both posts.
-  - **Never run a push bolt without its collar.** The collar is what stops the jaw plastic reaching the case.
+  - **Never run a push bolt without a collar.** The collar is what stops the screw driving the jaw plastic into the case. Bring the whole collar set: if the gauge fails twice the same way, change the collar as the CAD README says.
 - [ ] **Upward pull test.** Pull the frame up with a spring scale (or a weighed pull) to at least 2x the measured press force. PASS: it does not lift or slip. Repeat after the rig has been clamped for some hours. If the foam has relaxed, redo the squeeze (foam take-up in the CAD README (`hardware/cad/README.md`)).
 
 ### 0.3 Covers reachable
