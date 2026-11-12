@@ -46,12 +46,12 @@ Print the replica open side down. The plate bridges between the ribs. The leaf s
 
 ## Cutting the extrusion
 
-From the 1 m 2020 profile, with the default parameters:
+From the 1 m 2020 profile, with the desk as measured on 2026-11-12:
 
-- 1 rail, `rail_len` = **325.4 mm**
-- 2 posts, `post_len` = **90.4 mm** each
+- 1 rail, `rail_len` = **424.4 mm**
+- 2 posts, `post_len` = **97.4 mm** each
 
-That leaves about 490 mm spare. These lengths change when the desk is measured: run `openscad -o /tmp/a.stl frame_assembly.scad` and read them from the `ECHO` lines. Cut after measuring the desk.
+That leaves about 375 mm spare. These lengths follow `params.scad`: if a dimension changes, run `openscad -o /tmp/a.stl frame_assembly.scad` and read them from the `ECHO` lines.
 
 ## Assembly
 
@@ -127,7 +127,7 @@ These follow the measured `case_w`, and `frame_assembly.scad` echoes them.
    - **The NO blade must not fit.** If it does, the pad is not compressed enough: start again from step 2.
    - **Same result a second time:** change the collar on that side, one step at a time, and start again from step 2. NO blade fits: one step thinner. GO blade does not fit: one step thicker. Each step is 0.2 mm of squeeze.
 
-If locking moved a post, the gauge shows it. Loosen, correct and measure again. If you have calipers that reach, you can also check the spacing of the post inner faces, 202.4 mm with the estimated `case_w`, just above the jaws and before fitting the modules. That check is optional.
+If locking moved a post, the gauge shows it. Loosen, correct and measure again. If you have calipers that reach, you can also check the spacing of the post inner faces, 301.4 mm with the measured `case_w` of 280 mm, just above the jaws and before fitting the modules. That check is optional.
 
 The block only pushes, and the collar touches only the block and the bolt, so the screw cannot pass the limit however hard you turn it, but only with the collar fitted and as long as the start was right. Never run the push bolt without a collar: the collar is what stops the screw driving the jaw plastic into the case.
 
@@ -204,9 +204,9 @@ These figures are estimates, so the real test is the pull check under "Manual ch
 
 *Ontruimingsalarm* and *Koppel ruimtes* have keep-out volumes in `params.scad`. They follow `alarm_xy` and `koppel_xy`, so a measured position moves the safety volume. They cover the flip cover, its swing, side room for fingers and hand room up to 120 mm. `frame_assembly.scad` shows them as translucent volumes and fails the render if the rail, a post, a clamp, a tensioner or a module enters one. `params.scad` also fails the render if a covered button is listed as actuated. Nothing may ever be mounted over them.
 
-The nearest part is the SC 3 module, directly in front of the alarm. Its guide ends about 6 mm in front of the cover's lip. `lip_clearance_min` (4 mm) is only the minimum clearance from any part to the lip. It is not room for a finger: the hand has to come from above, over the rail and the modules, and down into the volume above the cover. None of this is proven. The asserts only check that parts stay out of a box, so only the cover check under "Manual checks" can show that the alarm is reachable.
+The nearest part is the SC 3 module, directly in front of the alarm. Its guide ends 9.9 mm in front of the cover's lip: the cover's front edge is flush with its button, as measured. `lip_clearance_min` (4 mm) is only the minimum clearance from any part to the lip. It is not room for a finger: the hand has to come from above, over the rail and the modules, and down into the volume above the cover. None of this is proven. The asserts only check that parts stay out of a box, so only the cover check under "Manual checks" can show that the alarm is reachable.
 
-If a measured `pitch_y` or `alarm_xy` trips the assert, the clearance is `pitch_y - cover_d / 2 - sleeve_half`. Measure `cover_d` first, then reduce `guide_wall` (down to about 1.6 mm) for a narrower nose. Don't just lower `lip_clearance_min`.
+If a measured `pitch_y` or `alarm_xy` trips the assert, the clearance is `pitch_y - cover_d / 2 + cover_off_y - sleeve_half`. Measure `cover_d` first, then reduce `guide_wall` (down to about 1.6 mm) for a narrower nose. Don't just lower `lip_clearance_min`.
 
 ## Speaker holder
 

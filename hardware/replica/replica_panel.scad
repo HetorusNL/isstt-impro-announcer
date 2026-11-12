@@ -30,15 +30,16 @@ module replica_panel() {
             for (b = buttons) {
                 socket = len([for (t = tb_sockets) if (t[0] == b[0]) t]) > 0;
                 covered = len([for (c = covered_buttons) if (c == b[0]) c]) > 0;
-                size = covered ? cover_w - 7 : btn_size; // clears the dummy cover as it swings
+                sx = covered ? cover_w - 7 : btn_w; // clears the dummy cover as it swings
+                sy = covered ? cover_d - 7 : btn_d;
                 p = panel_xy(b[0]);
-                if (!socket) translate([p[0] - size / 2, p[1] - size / 2, -0.1])
-                    cube([size, size, btn_proud + 0.1]);
+                if (!socket) translate([p[0] - sx / 2, p[1] + (covered ? cover_off_y : 0) - sy / 2, -0.1])
+                    cube([sx, sy, btn_proud + 0.1]);
             }
             // hinge lugs on the covered buttons
             for (c = covered_buttons, s = [-1, 1]) {
                 p = panel_xy(c);
-                translate([p[0] + s * (cover_w / 2 + 1.8) - 1.5, p[1] + cover_d / 2 - 3, -0.1])
+                translate([p[0] + s * (cover_w / 2 + 1.8) - 1.5, p[1] + cover_off_y + cover_d / 2 - 3, -0.1])
                     cube([3, 6, cover_pin_z + 0.1 + 3]);
             }
         }
@@ -59,7 +60,7 @@ module replica_panel() {
         // hinge pin holes: 1.75 mm filament
         for (c = covered_buttons) {
             p = panel_xy(c);
-            translate([p[0] - cover_w, p[1] + cover_d / 2, cover_pin_z]) rotate([0, 90, 0]) cylinder(d = 1.95, h = 2 * cover_w);
+            translate([p[0] - cover_w, p[1] + cover_off_y + cover_d / 2, cover_pin_z]) rotate([0, 90, 0]) cylinder(d = 1.95, h = 2 * cover_w);
         }
     }
 }

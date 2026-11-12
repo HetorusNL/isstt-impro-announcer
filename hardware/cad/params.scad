@@ -2,8 +2,8 @@
 //
 // Every part file includes this file. Units: mm, N, degrees.
 //
-// ESTIMATE = scaled from docs/reference/impro-desk.jpg (19 mm column pitch as
-// the scale reference, buttons assumed square to undo the camera angle) or
+// MEASURED = taken on the real desk, with the date. Photos: docs/reference/impro-desk.jpg
+// and impro-desk-mic.jpg. ESTIMATE = not measured yet: scaled from a photo or
 // taken from web listings. Each ESTIMATE says what to measure. Change the
 // number, re-render, reprint; nothing else needs editing. The asserts at the
 // bottom of this file and in frame_assembly.scad fail the render if a change
@@ -17,21 +17,23 @@
 $fn = 64;
 
 // ---- Desk case --------------------------------------------------------------
-case_w = 181;           // ESTIMATE measure: case outer width, left to right
-case_d = 190;           // ESTIMATE measure: case outer depth, front to back
-case_h = 65;            // ESTIMATE measure: table to the top of the black rim
-case_rim_w = 10;        // ESTIMATE measure: width of the black rim seen from above (edge profile)
-case_rim_h = 2;         // ESTIMATE measure: rim top above the panel surface (edge profile)
+case_w = 280;           // MEASURED 2026-11-12: case outer width, left to right
+case_d = 230;           // MEASURED 2026-11-12: case outer depth, front to back
+case_h = 66;            // MEASURED 2026-11-12: table to the top of the rim at the front. The top slopes: 78.5 at the back
+case_rim_w = 15;        // MEASURED 2026-11-12: width of the rim seen from above, all four sides
+case_rim_h = 1;         // MEASURED 2026-11-12: rim top above the panel surface
 
 // ---- Buttons ----------------------------------------------------------------
-pitch_x = 19;           // ESTIMATE scale reference; measure: SC 1 centre to SC 6 centre, divide by 5
-pitch_y = 21.5;         // ESTIMATE measure: SC 1 centre to ALGEMEEN centre
-btn_size = 16;          // ESTIMATE measure: outer bezel width of one button
-btn_proud = 4;          // ESTIMATE measure: unpressed cap top above the panel
-btn_travel = 2.5;       // ESTIMATE measure: cap travel until it clicks, with calipers
+btn_w = 24;             // MEASURED 2026-11-12: button width (X)
+btn_d = 18;             // MEASURED 2026-11-12: button depth (Y)
+btn_gap = 6.5;          // MEASURED 2026-11-12: space between buttons, taken as equal in X and Y
+pitch_x = btn_w + btn_gap;
+pitch_y = btn_d + btn_gap;
+btn_proud = 10;         // MEASURED 2026-11-12: unpressed cap top above the panel
+btn_travel = 3;         // MEASURED 2026-11-12: cap travel
 btn_force = 3;          // ESTIMATE [N] measure: SPREKEN press force (cup + water/coins, then weigh)
-btn_x0 = 33.5;          // ESTIMATE measure: case left face to the SC 1 centre
-btn_y_row3 = 41;        // ESTIMATE measure: case front face to the SPREKEN centre
+btn_x0 = 37 + btn_w / 2; // MEASURED 2026-11-12: 37 from the case left face to the ALGEMEEN button
+btn_y_row3 = 37 + btn_d / 2; // MEASURED 2026-11-12: 37 from the case front face to the SPREKEN button
 
 function btn_x(col) = btn_x0 + col * pitch_x;
 function btn_y(row) = btn_y_row3 + (3 - row) * pitch_y;
@@ -58,12 +60,13 @@ actuated = ["SC1", "SC2", "SC3", "SPREKEN"];
 // Ontruimingsalarm (evacuation alarm) and Koppel ruimtes. No frame part may enter.
 covered_buttons = ["KOPPEL", "ONTRUIMING"];
 // The keep-outs follow these two positions, not the grid. Measure them directly.
-alarm_xy = btn_xy("ONTRUIMING"); // ESTIMATE measure: case left and front faces to the alarm button centre
-koppel_xy = btn_xy("KOPPEL");    // ESTIMATE measure: case left and front faces to the Koppel ruimtes button centre
+alarm_xy = btn_xy("ONTRUIMING"); // MEASURED 2026-11-12: on the button grid
+koppel_xy = btn_xy("KOPPEL");    // MEASURED 2026-11-12: on the button grid
 function panel_xy(name) = name == "ONTRUIMING" ? alarm_xy : name == "KOPPEL" ? koppel_xy : btn_xy(name);
-cover_w = 18;           // ESTIMATE measure: flip cover width (X)
-cover_d = 20;           // ESTIMATE measure: flip cover depth (Y)
-cover_h = 12;           // ESTIMATE measure: closed cover top above the panel
+cover_w = btn_w;        // MEASURED 2026-11-12: flip cover is as wide as the button
+cover_d = 23;           // MEASURED 2026-11-12: flip cover depth (Y), 5 more than the button, all of it at the back
+cover_off_y = (cover_d - btn_d) / 2; // cover centre behind the button centre: front edges are flush
+cover_h = 13.5;         // MEASURED 2026-11-12: closed cover top above the panel, hinge at the back
 cover_pin_z = 4;        // ESTIMATE measure: hinge pin height above the panel (dummy cover on the replica)
 cover_swing_r = sqrt(cover_d * cover_d + cover_h * cover_h); // cover pivots on its back edge
 keepout_side = 10;      // finger room left and right of the cover
@@ -73,8 +76,8 @@ keepout_h = 120;        // hand room above the panel; no part may span over the 
 
 // [[xmin, ymin, zmin], [xmax, ymax, zmax]] of the keep-out around one covered button
 function keepout_box(name) = let (p = panel_xy(name)) [
-    [p[0] - cover_w / 2 - keepout_side, p[1] - cover_d / 2 - lip_clearance_min, 0],
-    [p[0] + cover_w / 2 + keepout_side, p[1] + cover_d / 2 + cover_swing_r + keepout_back, keepout_h]
+    [p[0] - cover_w / 2 - keepout_side, p[1] + cover_off_y - cover_d / 2 - lip_clearance_min, 0],
+    [p[0] + cover_w / 2 + keepout_side, p[1] + cover_off_y + cover_d / 2 + cover_swing_r + keepout_back, keepout_h]
 ];
 
 // ---- Rubber/EVA pads --------------------------------------------------------
@@ -285,10 +288,10 @@ spk_driver_d = 38.1;    // 1.5 inch driver
 spk_clear = 0.8;        // cradle clearance per side
 mic_dist = 40;          // driver face to mic head tip; spec: 30 to 50
 mic_offset = 0;         // 0 = mic centred between the drivers, spk_driver_pitch / 2 = mic on one driver
-tube_d = 10;            // ESTIMATE measure: gooseneck tube outer diameter, 8 to 12
+tube_d = 12.5;          // MEASURED 2026-11-12: gooseneck tube outer diameter
 tube_lining = 1;        // EVA or rubber lining in the clamp, per side
-mic_head_d = 20;        // ESTIMATE measure: mic head diameter (not in the photo)
-mic_head_len = 30;      // ESTIMATE measure: mic head length (not in the photo)
+mic_head_d = 32;        // MEASURED 2026-11-12: mic head diameter
+mic_head_len = 45;      // MEASURED 2026-11-12: mic head length
 clamp_gap_below_head = 10; // clamp top edge below the mic head
 clamp_h = 20;           // clamp height along the tube
 cup_lip = 8;            // cradle grips this far along each prism end

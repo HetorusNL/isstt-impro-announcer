@@ -45,7 +45,7 @@ module desk() {
         p = panel_xy(b[0]);
         covered = len([for (c = covered_buttons) if (c == b[0]) c]) > 0;
         color(covered ? "Red" : "WhiteSmoke")
-            translate([p[0] - btn_size / 2, p[1] - btn_size / 2, 0]) cube([btn_size, btn_size, btn_proud]);
+            translate([p[0] - btn_w / 2, p[1] - btn_d / 2, 0]) cube([btn_w, btn_d, btn_proud]);
     }
 }
 
