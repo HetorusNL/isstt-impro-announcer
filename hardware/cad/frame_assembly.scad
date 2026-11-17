@@ -36,6 +36,13 @@ echo(gauge_go = gauge_go, gauge_nogo = gauge_nogo);
 echo(test_button_leaf_t = tb_leaf_t, test_button_force_N = tb_print_E * tb_leaf_b * pow(tb_leaf_t, 3) / (4 * pow(tb_leaf_l, 3)) * (tb_preload + btn_travel));
 
 // ---- Picture -----------------------------------------------------------------
+// Print colours (Bambu Lab PLA Basic). No red on the rig: red is for the alarm covers.
+c_structure = "#101010";    // Black: jaws, tensioner, end caps, speaker holder
+c_module = "#0A2989";       // Blue: carriage and bracket of the zone modules
+c_spreken = "#FF9016";      // Pumpkin Orange: carriage and bracket of the SPREKEN module
+c_moving = "#FEC600";       // Sunflower Yellow: cams and plungers
+c_collar = "#00AE42";       // Bambu Green: nominal stop collar
+
 module desk() {
     color("DimGray") difference() {
         translate([0, 0, case_rim_h - case_h]) cube([case_w, case_d, case_h]);
@@ -58,32 +65,32 @@ module frame() {
     color("DarkGray") for (x = [post_x_l, post_x_r], s = [-1, 1])
         translate([x + s * (ext / 2 + bracket_leg / 2), rail_y, rail_z0 - bracket_leg / 2])
             cube([bracket_leg, ext, bracket_leg], center = true);
-    color("Orange") {
+    color(c_structure) {
         translate([post_x_l + ext / 2, rail_y, 0]) edge_clamp();
         translate([post_x_r - ext / 2, rail_y, 0]) rotate(180) edge_clamp();
     }
-    color("Salmon") for (a = [[post_x_l - ext / 2, 180], [post_x_r + ext / 2, 0]])
+    for (a = [[post_x_l - ext / 2, 180], [post_x_r + ext / 2, 0]])
         translate([a[0], rail_y, 0]) rotate(a[1]) {
-            tensioner_block();
-            translate([0, 0, ten_z]) tensioner_pad();
-            translate([ten_head_x, 0, ten_z]) rotate([0, 90, 0]) tensioner_collar();
+            color(c_structure) tensioner_block();
+            color(c_structure) translate([0, 0, ten_z]) tensioner_pad();
+            color(c_collar) translate([ten_head_x, 0, ten_z]) rotate([0, 90, 0]) tensioner_collar();
         }
 }
 
-module servo_module() {
-    color("SkyBlue") servo_carriage();
-    color("SteelBlue") servo_bracket();
-    color("Black") translate([0, sv_base_y, z_shaft]) mg90s();
+module servo_module(body = c_module) {
+    color(body) servo_carriage();
+    color(body) servo_bracket();
+    color("#303030") translate([0, sv_base_y, z_shaft]) mg90s();
     // cam drawn at press: eccentric past horizontal, button bottomed out
-    color("Gold") translate([0, cam_back_y, z_shaft]) rotate([-90, 0, 0]) rotate(90 - cam_press_angle) servo_cam();
-    color("Tomato") translate([0, mod_d, btn_proud - btn_travel]) servo_plunger();
+    color(c_moving) translate([0, cam_back_y, z_shaft]) rotate([-90, 0, 0]) rotate(90 - cam_press_angle) servo_cam();
+    color(c_moving) translate([0, mod_d, btn_proud - btn_travel]) servo_plunger();
 }
 
 desk();
 frame();
 for (a = actuated) {
     p = btn_xy(a);
-    translate([p[0], rail_y, 0]) rotate(p[1] > rail_y ? 0 : 180) servo_module();
+    translate([p[0], rail_y, 0]) rotate(p[1] > rail_y ? 0 : 180) servo_module(a == "SPREKEN" ? c_spreken : c_module);
 }
 for (c = covered_buttons) {
     k = keepout_box(c);

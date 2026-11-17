@@ -6,32 +6,54 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 
 ## Parts
 
-| File | Part | Print |
-|---|---|---|
-| `edge_clamp.scad` | Padded clamp jaw, for both case sides (the same part turned 180 degrees) | 2 |
-| `servo_carriage.scad` | Module carriage: bolts to a rail face, keyed in the slot | 4 |
-| `servo_bracket.scad` | Module bracket: holds the servo and plunger guide, slides up and down the carriage | 4 |
-| `servo_cam.scad` | Cam on the servo horn | 4 |
-| `servo_plunger.scad` | Plunger between cam and button | 4 + spare |
-| `tensioner_block.scad` | Tensioner block on the rail outside each post, for both sides (the same part turned 180 degrees) | 2 |
-| `tensioner_pad.scad` | Tensioner pressure pad, bridges the slot in the post | 2 |
-| `tensioner_collar.scad` | Stop collars under the push bolt head, set the squeeze. One plate: 2 each of 2.2, 2.4, 2.6 and 2.8 mm | 1 plate |
-| `squeeze_gauge.scad` | Go/no-go feeler gauge for the post gap, one for both sides | 1 |
-| `end_cap.scad` | Press-fit end cap: 2 rail ends, 2 post bottoms | 4 + spare |
-| `speaker_cradle.scad` | ER-151 cradle, arm and fixed half of the tube clamp | 1 |
-| `speaker_clamp_cap.scad` | Removable half of the tube clamp | 1 |
-| `../replica/replica_panel.scad` | Replica of the desk top | 1 |
-| `../replica/test_button_plunger.scad` | Test button cap and snap stem | 4 |
-| `../replica/test_button_leaf.scad` | Test button leaf spring | 4 + spare |
-| `../replica/alarm_cover.scad` | Dummy flip cover | 2 |
-| `frame_assembly.scad` | The whole rig. Not printed: a picture and the safety checks | - |
-| `params.scad`, `lib.scad` | All dimensions; shared geometry | - |
+| File | Part | Print | Colour |
+|---|---|---|---|
+| `edge_clamp.scad` | Padded clamp jaw, for both case sides (the same part turned 180 degrees) | 2 | Black |
+| `servo_carriage.scad` | Module carriage: bolts to a rail face, keyed in the slot | 4 | Blue x3, Pumpkin Orange x1 (SPREKEN) |
+| `servo_bracket.scad` | Module bracket: holds the servo and plunger guide, slides up and down the carriage | 4 | Blue x3, Pumpkin Orange x1 (SPREKEN) |
+| `servo_cam.scad` | Cam on the servo horn | 4 | Sunflower Yellow |
+| `servo_plunger.scad` | Plunger between cam and button | 4 + spare | Sunflower Yellow |
+| `tensioner_block.scad` | Tensioner block on the rail outside each post, for both sides (the same part turned 180 degrees) | 2 | Black |
+| `tensioner_pad.scad` | Tensioner pressure pad, bridges the slot in the post | 2 | Black |
+| `tensioner_collar.scad` | Stop collars under the push bolt head, set the squeeze. One plate: 2 each of 2.2, 2.4, 2.6 and 2.8 mm | 1 plate | Bambu Green |
+| `squeeze_gauge.scad` | Go/no-go feeler gauge for the post gap, one for both sides | 1 | Hot Pink |
+| `end_cap.scad` | Press-fit end cap: 2 rail ends, 2 post bottoms | 4 + spare | Black |
+| `speaker_cradle.scad` | ER-151 cradle, arm and fixed half of the tube clamp | 1 | Black |
+| `speaker_clamp_cap.scad` | Removable half of the tube clamp | 1 | Black |
+| `../replica/replica_panel.scad` | Replica of the desk top | 1 | Gray |
+| `../replica/test_button_plunger.scad` | Test button cap and snap stem | 4 | Jade White |
+| `../replica/test_button_leaf.scad` | Test button leaf spring | 4 + spare | Jade White |
+| `../replica/alarm_cover.scad` | Dummy flip cover | 2 | Red |
+| `frame_assembly.scad` | The whole rig. Not printed: a picture and the safety checks | - | - |
+| `params.scad`, `lib.scad` | All dimensions; shared geometry | - | - |
+
+**Colours when slicing.** The colours are Bambu Lab PLA Basic. Each file is one colour, so slice one plate per colour. For the carriage and the bracket that means two plates each: 3 in Blue and 1 in Pumpkin Orange. Never print a rig part in Red: on the desk, red means the covered alarm buttons, and the only red print is the replica's dummy cover.
+
+| Colour | Parts |
+|---|---|
+| Black (10101) | 2 jaws, 2 tensioner blocks, 2 tensioner pads, end caps, speaker cradle and clamp cap |
+| Blue (10601) | 3 carriages and 3 brackets, for SC 1, SC 2 and SC 3 |
+| Pumpkin Orange (10301) | 1 carriage and 1 bracket, for SPREKEN |
+| Sunflower Yellow (10402) | 4 cams, 4 plungers and a spare: the moving parts |
+| Bambu Green (10501) | Stop collar plate |
+| Hot Pink (10204) | Squeeze gauge |
+| Gray (10103) | Replica panel |
+| Jade White (10100) | Replica test button caps and leaf springs |
+| Red (10200) | Replica dummy covers only |
+
+`frame_assembly.scad` draws the rig in these colours:
+
+![The rig in its print colours, from the front](img/rig-colours-front.png)
+
+![The rig in its print colours, from the back](img/rig-colours-back.png)
+
+The grey translucent blocks are the keep-out volumes over the covered buttons, not parts.
 
 ## Print settings (Bambu Lab H2D)
 
 | Setting | Structural parts (clamps, carriages, brackets, tensioner blocks and pads) | Other parts |
 |---|---|---|
-| Material | PETG (PLA also works, but creeps under the clamp load in a warm room) | PETG or PLA |
+| Material | PLA Basic | PLA Basic |
 | Layer height | 0.2 mm | 0.2 mm |
 | Walls | 5 | 3 |
 | Top and bottom layers | 6 | 4 |
@@ -166,7 +188,7 @@ Press force 3 N (ESTIMATE) at arm length 2.5 mm, plus cam friction (mu 0.3 at ra
 
 ### Deflection while holding SPREKEN
 
-Estimates with press force 3 N; printed PETG E = 2000 N/mm2. The real test is the stiffness check under "Manual checks".
+Estimates with press force 3 N and E = 2000 N/mm2 for the printed parts, which is on the safe side for PLA (about 3000). The real test is the stiffness check under "Manual checks".
 
 | Item | Calculation | Deflection |
 |---|---|---|
@@ -217,7 +239,7 @@ The ER-151 slides into the cradle from the open side, then a strap holds it. The
 
 Choice: a **printed leaf spring**, no parts to buy. The cap sits on a split stem with snap barbs under the panel. The stem presses on a leaf whose root pushes into a tunnel under the panel.
 
-The leaf is a cantilever, `k = E b t^3 / (4 L^3)`. `params.scad` calculates its thickness from `btn_force`, rounded to whole 0.2 mm layers. The default gives t = 1.4 mm and 3.1 N at full travel, but only if printed PETG really has E = 2000 N/mm2, which is an estimate.
+The leaf is a cantilever, `k = E b t^3 / (4 L^3)`. `params.scad` calculates its thickness from `btn_force`, rounded to whole 0.2 mm layers. The default gives t = 1.2 mm and 3.2 N at full travel, but only if printed PLA really has E = 3000 N/mm2, which is an estimate.
 
 **Calibrate it after printing:** cup + water/coins on the cap until the cap lands, then weigh. If it is off, change `tb_print_E` and reprint the leaf.
 

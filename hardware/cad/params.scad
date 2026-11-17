@@ -285,7 +285,7 @@ tb_leaf_b = 10;         // leaf spring width
 tb_preload = 2.5;       // leaf deflection with the button at rest
 tb_root_l = 20;         // leaf root block length
 tb_root_h = 8;          // leaf root block height
-tb_print_E = 2000;      // ESTIMATE [N/mm2] printed PETG; calibrate by measuring the finished button
+tb_print_E = 3000;      // ESTIMATE [N/mm2] printed PLA; calibrate by measuring the finished button
 // Leaf thickness for btn_force at full travel, rounded to 0.2 mm layers (fixed cantilever k = E b t^3 / 4 L^3)
 tb_leaf_t = round(5 * pow(btn_force * 4 * pow(tb_leaf_l, 3)
     / ((tb_preload + btn_travel) * tb_print_E * tb_leaf_b), 1 / 3)) / 5;
