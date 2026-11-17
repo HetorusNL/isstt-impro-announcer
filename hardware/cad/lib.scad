@@ -38,7 +38,8 @@ module servo_carriage() {
         }
         // rail bolt, head recessed so the bracket passes over it
         translate([0, 0, rail_zc]) rotate([-90, 0, 0]) {
-            cylinder(d = m5_clear, h = car_y1 + 1);
+            // a printed skin closes the hole under the head recess, so the recess ceiling bridges cleanly: drill it out
+            cylinder(d = m5_clear, h = car_y1 - m5_head_h - ten_membrane);
             translate([0, 0, car_y1 - m5_head_h]) cylinder(d = m5_head_d, h = m5_head_h + 1);
         }
         // height bolt: T-nut pocket from the back, above the rail
@@ -68,6 +69,8 @@ module servo_bracket() {
                         [sp_y1 + 2, sleeve_z1 + 4], [sp_y1 + 2, shelf_z1], [y_back, shelf_z1]
                     ]);
                     translate([car_y0 + 0.3, shelf_z0]) square([br_y1 - car_y0 - 0.3, br_top - shelf_z0]);
+                    // 45 degree gusset under the shelf, so the bracket prints upright without supports
+                    polygon([[sp_y1 + 2, shelf_z0], [br_y1, shelf_z0], [sp_y1 + 2, shelf_z0 - (br_y1 - sp_y1 - 2)]]);
                 }
         }
         // servo body window, servo goes in from the back with its ears on the back face
