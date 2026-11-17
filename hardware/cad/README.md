@@ -1,6 +1,6 @@
 # Servo rig parts
 
-Parametric OpenSCAD sources for the rig that presses buttons on the IMPRO desk from the outside. The numbers come from one file, `params.scad`. Most desk numbers are estimates from the photo, marked `// ESTIMATE` with what to measure. Change them there, re-render, reprint.
+Parametric OpenSCAD sources for the rig that presses buttons on the IMPRO desk from the outside. The numbers come from one file, `params.scad`. The desk and the bought parts are measured (`// MEASURED` with the date). What is left is marked `// ESTIMATE` with what to measure. Change them there, re-render, reprint.
 
 Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Each part file lays its part in print orientation.
 
@@ -15,7 +15,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | `servo_plunger.scad` | Plunger between cam and button | 4 + spare |
 | `tensioner_block.scad` | Tensioner block on the rail outside each post, for both sides (the same part turned 180 degrees) | 2 |
 | `tensioner_pad.scad` | Tensioner pressure pad, bridges the slot in the post | 2 |
-| `tensioner_collar.scad` | Stop collars under the push bolt head, set the squeeze. One plate: 2 each of 1.8, 2.0, 2.2 and 2.4 mm | 1 plate |
+| `tensioner_collar.scad` | Stop collars under the push bolt head, set the squeeze. One plate: 2 each of 2.2, 2.4, 2.6 and 2.8 mm | 1 plate |
 | `squeeze_gauge.scad` | Go/no-go feeler gauge for the post gap, one for both sides | 1 |
 | `end_cap.scad` | Press-fit end cap: 2 rail ends, 2 post bottoms | 4 + spare |
 | `speaker_cradle.scad` | ER-151 cradle, arm and fixed half of the tube clamp | 1 |
@@ -38,26 +38,26 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | Infill | 40 % gyroid | 15 % |
 | Supports | None. See the tensioner block note | Only for `speaker_cradle.scad`, under the cups |
 
-Print the tensioner block standing on its outer end, as its file lays it out. Slicing it shows three short bridges and no other overhang: the shoulder over the head slot (10.7 mm), the ceiling of the T-nut pocket (10.6 mm), and the top of the horizontal rail bolt hole (about 6 mm). The shoulder carries the push load, and it bends along its bridge strands, which is the strong direction. It has a 0.2 mm skin closing the bolt hole so the bridge prints whole: drill it out with a 5.5 mm drill (`m5_clear`). Check the collar thicknesses with calipers. The nominal collar is 2.2 mm and has no notch. Each notch on the rim means 0.2 mm thinner (2.0 and 1.8 mm), and a flat on the rim marks the 2.4 mm one.
+Print the tensioner block standing on its outer end, as its file lays it out. Slicing it shows three short bridges and no other overhang: the shoulder over the head slot (10.7 mm), the ceiling of the T-nut pocket (6.4 mm), and the top of the horizontal rail bolt hole (about 6 mm). The shoulder carries the push load, and it bends along its bridge strands, which is the strong direction. It has a 0.2 mm skin closing the bolt hole so the bridge prints whole: drill it out with a 5.5 mm drill (`m5_clear`). Check the collar thicknesses with calipers. The nominal collar is 2.6 mm and has no notch. Each notch on the rim means 0.2 mm thinner (2.4 and 2.2 mm), and a flat on the rim marks the 2.8 mm one.
 
-Print the gauge as laid out, so the blade thickness is in the print plane. Check both blades with calipers: go 10.45 mm, no-go 11.05 mm. If one is more than 0.1 mm off, sand it or reprint.
+Print the gauge as laid out, so the blade thickness is in the print plane. Check both blades with calipers: go 11.45 mm, no-go 12.05 mm. If one is more than 0.1 mm off, sand it or reprint.
 
 Print the replica open side down. The plate bridges between the ribs. The leaf springs need 100 % infill and must lie flat, so the leaf thickness is a whole number of layers. Print the plungers and the cam with 5 walls: they carry the press force.
 
 ## Cutting the extrusion
 
-From the 1 m 2020 profile, with the desk as measured on 2026-11-12:
+From the 1 m 2020 profile, with the desk as measured on 2026-11-12 and the parts as measured on 2026-11-17:
 
-- 1 rail, `rail_len` = **424.4 mm**
+- 1 rail, `rail_len` = **425.6 mm**
 - 2 posts, `post_len` = **97.4 mm** each
 
-That leaves about 375 mm spare. These lengths follow `params.scad`: if a dimension changes, run `openscad -o /tmp/a.stl frame_assembly.scad` and read them from the `ECHO` lines.
+That leaves about 374 mm spare. These lengths follow `params.scad`: if a dimension changes, run `openscad -o /tmp/a.stl frame_assembly.scad` and read them from the `ECHO` lines.
 
 ## Assembly
 
-**The T-nuts are slide-in: they only enter from a profile end.** Insert every nut you need, M5 and M4, **before** fitting corner brackets or end caps. If you miss one, the joint has to come apart.
+**All the nuts are drop-in.** The M5 nuts (about 10 x 6 mm) and the M4 nuts of the corner brackets (11.4 x 5.8 mm) go into a slot from the front, anywhere along it, and turn to lock as the bolt tightens. Nothing has to go in from a profile end, and a missed nut can be added later. In the printed pockets the M5 nuts lie the long way and cannot turn.
 
-Count of M5 slide-in nuts, with the default four modules:
+Count of M5 nuts, with the default four modules:
 
 | Where | Slot | Nuts |
 |---|---|---|
@@ -70,15 +70,9 @@ Count of M5 slide-in nuts, with the default four modules:
 | Speaker clamp | Pockets | 2 |
 | **Total** | | **18 of the 20 ordered** |
 
-The corner brackets bring their own hardware, which is not in this count: M4x8 bolts and M4 slide-in nuts, 2 of each per bracket, so **8 M4 nuts on top of the 18 M5**. One nut of each bracket goes in the rail's bottom slot and the other in a post's side slot. Insertion order per slot:
+The corner brackets bring their own hardware, which is not in this count: M4x8 bolts and M4 drop-in nuts, 2 of each per bracket, so **8 M4 nuts on top of the 18 M5**. One nut of each bracket goes in the rail's bottom slot and the other in a post's side slot.
 
-| Slot | Enter from | Order |
-|---|---|---|
-| Rail bottom, from each end | That rail end | Inner bracket M4, then outer bracket M4, then the tensioner M5 last, so it is outermost |
-| Post inner face (the jaw side) | Post bottom | Bracket M4 first, so it is nearest the rail, then the 2 jaw M5 |
-| Post outer face | Post bottom | Bracket M4 only |
-
-Use M5x10 for every printed part, including the tensioner. M5x8 leaves too little thread in the T-nut there.
+Use M5x10 for every printed part, including the tensioner. M5x8 leaves too little thread in the T-nut there. The M5 bolts are pan head with a Phillips drive (head 9.9 x 4.0 mm, real length 9.8 mm), so every M5 needs a PH2 screwdriver in line with the bolt. The bracket bolts are M4 with a 2.5 mm hex key.
 
 Cut these pads from the sheet, slightly oversize so they press in:
 
@@ -90,14 +84,14 @@ Cut these pads from the sheet, slightly oversize so they press in:
 
 The side pads and tip dots stay in by the press fit. The under-lip pad hangs upside down while the frame is lowered: a dab of removable tack on the pad-to-jaw side only is fine. Never put anything on the side that faces the desk.
 
-1. Cut the rail and posts, then fit the nuts above, including the 8 M4 bracket nuts.
+1. Cut the rail and posts. Put each nut in its slot as you reach the part that needs it.
 2. Join each post's top end to the rail's bottom face with 2 corner brackets, one on each side of the post, with the M4x8 bolts. Tighten the bolts into the post. Leave the bolts into the rail loose, so the posts slide along the rail. The bracket's centring lips sit in the slot, so a loose bracket still slides along the rail.
 3. Press the end caps into the rail ends and post bottoms.
 4. Bolt a jaw to each post's inner face with 2 M5x10, key in the slot, then push in the pads. No adhesive. The pad covers the bolt heads, so take it out to adjust the jaw.
-5. Tensioner, one per side: drill out the skin in the shoulder hole. Slide a T-nut into the block's pocket. Put a nominal stop collar (2.2 mm, no notch) on an M5x10 under its head, and thread the bolt through the shoulder into the nut. Put the pad's stub in the socket. Bolt the block to the rail's bottom slot with an M5x10, key in the slot, with a key's long arm up through the head slot. Keep it loose for now.
+5. Tensioner, one per side: drill out the skin in the shoulder hole. Slide a T-nut into the block's pocket. Put a nominal stop collar (2.6 mm, no notch) on an M5x10 under its head, and thread the bolt through the shoulder into the nut. Put the pad's stub in the socket. Bolt the block to the rail's bottom slot with an M5x10, key in the slot, with the screwdriver up through the head slot. Keep it loose for now.
 6. Set the squeeze, without the modules. See "Setting the squeeze".
-7. Module: trim a stock single horn to `horn_stub` (7.5 mm from the axis). Drop the plunger into the guide from above, with the dot in its tip. Fit the servo from the back with the ears on the back face and the servo's own screws. Fit the horn and the cam with the horn screw. If that screw is too short with the cam fitted, use M2x8: check on one servo first.
-8. Carriage on rail: M5x10 into a T-nut, key in the slot. Bracket on carriage: M5x10 through the slot into a T-nut in the pocket. The slot also gives a hex key access to the rail bolt, so a module can slide along the rail without taking it apart.
+7. Module: trim a stock single horn to `horn_stub` (7.5 mm from the axis). Drop the plunger into the guide from above, with the dot in its tip. Fit the servo from the back with the ears on the back face and the servo's own screws. Fit the horn and the cam with the horn screw. The stock horn screw is 2.5 mm thick with 4 mm of thread, and the cam adds 0.8 mm under its head, so it has about 1.2 mm of thread left in the shaft (estimate). That only holds the cam on: the arm in its pocket carries the turning force. If it does not bite on one servo, use an M2.5x6 instead.
+8. Carriage on rail: M5x10 into a T-nut, key in the slot. Bracket on carriage: M5x10 through the slot into a T-nut in the pocket. The slot also gives a screwdriver access to the rail bolt, so a module can slide along the rail without taking it apart.
 9. Slide each module over its button. With the eccentric pointing up, which is the cam's clear position, adjust the height so that the plunger rests on the cap with about 1 mm gap to the cam. Do not set this at servo angle 90: see "Cam calibration".
 
 Module height adjustment is +6 mm and -3 mm: further down, the guide touches the cap.
@@ -110,28 +104,28 @@ The clamping force comes from compressing the side pads by `pad_squeeze`, **0.8 
 
 | Post inner face to case wall, each side | Meaning |
 |---|---|
-| 11.5 mm | Pad just touching: the start |
-| **10.7 mm** | **Target: the collar has seated** |
-| 10.0 mm | Jaw plastic touches the case. **Never go this far: it can mark the desk.** |
+| 12.5 mm | Pad just touching: the start |
+| **11.7 mm** | **Target: the collar has seated** |
+| 11.0 mm | Jaw plastic touches the case. **Never go this far: it can mark the desk.** |
 
 These follow the measured `case_w`, and `frame_assembly.scad` echoes them.
 
 1. Lower the frame over the desk with the lips resting on the rim. The bolts into the rail stay just loose enough to slide, on all 4 corner brackets: snug each one, then back it off about a quarter turn. A looser bracket lets the post tilt, and a tight one stops it sliding. The bracket's centring lips sit in the slot: a loose bracket still slides along the rail, which steps 3 and 5 rely on.
 2. Back off each push bolt by at least one full turn from the collar, and push the pad fully into its block.
 3. Bring each post inward by hand until its pad just touches the case wall: the post stops sliding freely. Do not press into the foam.
-4. Slide each block along the rail until its pad touches the post, without moving the post. Tighten the block's rail bolt with the long arm of a 3 mm hex key, up through the head slot. The handle swings below the block.
-5. Turn the push bolts in with the same key, from outside, along the rail. Take turns, a quarter turn per side, until each head seats on its collar and stops. From contact that is one turn, 0.8 mm. If you backed off further, the first turns do nothing, and the result is the same. A loose post tilts, because the bolt pushes above the pad, so keep the posts upright.
-6. Lock the corner bracket bolts into the rail, with the key that fits the bracket bolts: they are M4x8, and the size is unconfirmed, probably 2.5 mm if button head and 3 mm if socket head. Reach the outer bracket's bolts with the key's short arm, from below, through the gap above the block's arm, with the long arm swinging out to the front or back. The CAD draws the bracket as a cube, so the real access may instead be from the side or through the window in the sloped face.
+4. Slide each block along the rail until its pad touches the post, without moving the post. Tighten the block's rail bolt with a PH2 screwdriver, straight up from below through the head slot. The bolt head sits 35 mm up inside a 10.7 mm wide channel, about 125 mm above the table: a normal screwdriver is too long to stand under it. Use a stubby one with a blade of at least 40 mm, or a long PH2 bit in a small ratchet, or let that end of the rig hang over the table edge. Two hex socket M5x10 bolts in these two places would bring back the L-key.
+5. Turn the push bolts in with the screwdriver, from outside, along the rail. Take turns, a quarter turn per side, until each head seats on its collar and stops. From contact that is one turn, 0.8 mm. If you backed off further, the first turns do nothing, and the result is the same. A loose post tilts, because the bolt pushes above the pad, so keep the posts upright.
+6. Lock the corner bracket bolts into the rail, with the 2.5 mm hex key: they are M4x8. Reach the outer bracket's bolts with the key's short arm, from below, through the gap above the block's arm, with the long arm swinging out to the front or back. The CAD draws the bracket as a cube, so the real access may instead be from the side or through the window in the sloped face.
 7. Check with the gauge at the front and back edge of each post. Hold it by the bar, flat face against the case wall, and push a blade gently up from below, between the case wall and the 5 mm of post that sticks out below the jaw. Turn it around for the other side.
    - **The GO blade must fit.** If it does not, the jaw plastic is too close: loosen the brackets and start again from step 2.
    - **The NO blade must not fit.** If it does, the pad is not compressed enough: start again from step 2.
    - **Same result a second time:** change the collar on that side, one step at a time, and start again from step 2. NO blade fits: one step thinner. GO blade does not fit: one step thicker. Each step is 0.2 mm of squeeze.
 
-If locking moved a post, the gauge shows it. Loosen, correct and measure again. If you have calipers that reach, you can also check the spacing of the post inner faces, 301.4 mm with the measured `case_w` of 280 mm, just above the jaws and before fitting the modules. That check is optional.
+If locking moved a post, the gauge shows it. Loosen, correct and measure again. If you have calipers that reach, you can also check the spacing of the post inner faces, 303.4 mm with the measured `case_w` of 280 mm, just above the jaws and before fitting the modules. That check is optional.
 
 The block only pushes, and the collar touches only the block and the bolt, so the screw cannot pass the limit however hard you turn it, but only with the collar fitted and as long as the start was right. Never run the push bolt without a collar: the collar is what stops the screw driving the jaw plastic into the case.
 
-**Why a collar set.** The squeeze depends on the real bolt length (about 0.3 mm either way), on how the block printed, and on how much the block gives under load. Those errors are the same on every attempt, so repeating the procedure does not remove them: a different collar does. On paper the thinnest collar (1.8 mm) gives 1.2 mm, which still leaves 0.3 mm before the jaw plastic touches the case. A touch is not a disaster, but avoid it: the gauge's GO blade is the check.
+**Why a collar set.** The squeeze depends on the real bolt length (9.8 mm on the measured one; others may differ a little), on how the block printed, and on how much the block gives under load. Those errors are the same on every attempt, so repeating the procedure does not remove them: a different collar does. On paper the thinnest collar (2.2 mm) gives 1.2 mm, which still leaves 0.3 mm before the jaw plastic touches the case. A touch is not a disaster, but avoid it: the gauge's GO blade is the check.
 
 **Bench check, before the desk.** Assemble one block with its nut, pad, bolt and nominal collar. Back the bolt off and push the pad fully in, then turn the bolt in until the head seats. Measure the gap that opens between the pad's plate and the block's end, with calipers or feeler blades: it should be 0.8 mm. If it is off by 0.2 mm or more, start with the collar that corrects it. This check is without load, so the block's give is not in it: the gauge on the desk has the last word.
 
@@ -176,7 +170,7 @@ Estimates with press force 3 N; printed PETG E = 2000 N/mm2. The real test is th
 
 | Item | Calculation | Deflection |
 |---|---|---|
-| Rail bending | 2020, simply supported over 222.4 mm, load at the middle (worst case): F L^3 / 48 E I | 0.0014 mm |
+| Rail bending | 2020, simply supported over 323.4 mm, load at the middle (worst case): F L^3 / 48 E I | 0.0044 mm |
 | Module lower walls | Moment 3 N x 12 mm over 20 mm, two walls 2 x 10 mm | 0.012 mm |
 | Module upper U section | Moment 3 N x 12 mm over 39 mm, shelf to height bolt, walls 2 x 11 mm (conservative: the plate also bears on the carriage) | 0.018 mm |
 | Plunger compression | 3 N over 6 x 6 mm, 18.5 mm long | 0.001 mm |
@@ -233,10 +227,13 @@ The cap landing on the panel is the hard stop, and it represents the button bein
 
 - [ ] Print the parts and the replica.
 - [ ] Calibrate the test button force (see above).
-- [ ] Measure the desk and replace every `ESTIMATE` in `params.scad` that matters for fit. Reprint.
+- [ ] Replace the remaining `ESTIMATE`s in `params.scad` that matter for fit: `btn_force`, `cover_pin_z`. Reprint.
+- [ ] **Nut pockets:** the M5 nut must slide into a printed pocket (11.7 x 6.4 mm) and must not turn in it when the bolt is tightened. Check on one carriage first.
 - [ ] Check T-nut and servo fits on one printed carriage and bracket before printing all four.
+- [ ] **Slot key against the T-nut:** the nut's raised centre sits between the lips, about 0.5 mm below the profile face, so the printed keys are left out within 6.2 mm of each bolt (`key_relief`): the nut is up to 11.4 mm long before it turns. Bolt one keyed part to the profile and check that it seats flat on the face and that the nut turns and locks under it.
+- [ ] **Block rail bolt:** check that your screwdriver reaches it from below with the rig on a table (step 4 of "Setting the squeeze").
 - [ ] Render `frame_assembly.scad` before reprinting anything, so the safety and hold-down asserts run.
-- [ ] **Hex key:** when the corner brackets arrive, fit one real bracket and try the key that fits the bracket bolts on its rail bolt, with a printed block in place, before printing all blocks. The real access may be from the side or through the window in the sloped face. The CAD draws the bracket as a cube, so the 2.8 mm `bracket_key_clearance` is an estimate.
+- [ ] **Hex key:** when the corner brackets arrive, fit one real bracket and try the key that fits the bracket bolts on its rail bolt, with a printed block in place, before printing all blocks. The real access may be from the side or through the window in the sloped face. The CAD draws the bracket as a cube, so the 1.4 mm `bracket_key_clearance` is an estimate.
 - [ ] **Squeeze:** set and check it as in "Setting the squeeze". Jaw plastic never touches the case.
 - [ ] **Case wall:** confirm the case side wall is flat and vertical where the pads sit.
 - [ ] **Stiffness:** on the replica, hold SPREKEN with the servo at its press angle for 60 s. The paper strip stays trapped the whole time, and deflection measured at the rail or module is below 0.5 mm (feeler gauge or dial).

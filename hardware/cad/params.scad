@@ -81,7 +81,7 @@ function keepout_box(name) = let (p = panel_xy(name)) [
 ];
 
 // ---- Rubber/EVA pads --------------------------------------------------------
-pad_t = 3;              // EVA or rubber sheet thickness (sheet not ordered yet; measure when it arrives)
+pad_t = 3;              // MEASURED 2026-11-17: EVA sheet thickness. No adhesive backing: pads are a push fit
 pad_pocket = 1.5;       // pad recess depth; the pad stands proud by the rest
 pad_squeeze = 0.8;      // compression per side when clamped: one full turn of the M5 push bolt. The one squeeze number; sets the stop collar
 pad_stress = 0.05;      // ESTIMATE [N/mm2] EVA stress at about 25 % compression, low end. A constant: if pad_squeeze / pad_t changes much, change this too
@@ -89,11 +89,11 @@ pad_mu = 0.5;           // ESTIMATE EVA on powder coat friction, conservative
 
 // ---- 2020 extrusion, slot 6 --------------------------------------------------
 ext = 20;
-slot_w = 6.2;           // ESTIMATE measure: slot opening
-slot_lip = 1.8;         // ESTIMATE measure: lip thickness of the slot opening
-slot_cavity_w = 11;     // ESTIMATE measure: slot width behind the lip
-slot_depth = 6.1;       // ESTIMATE measure: face to bottom of the slot
-ext_bore = 4.2;         // ESTIMATE measure: centre bore
+slot_w = 6.3;           // MEASURED 2026-11-17: slot opening
+slot_lip = 1.5;         // MEASURED 2026-11-17: lip thickness of the slot opening
+slot_cavity_w = 12.2;   // MEASURED 2026-11-17: slot width behind the lip (drawn as a rectangle; the real cavity tapers)
+slot_depth = 5.8;       // MEASURED 2026-11-17: face to bottom of the slot
+ext_bore = 5.4;         // MEASURED 2026-11-17: centre bore, a square hole
 ext_I = 6900;           // ESTIMATE [mm4] second moment of area; check supplier's sheet (equal in both axes)
 ext_E = 69000;          // [N/mm2] aluminium
 key_w = 5.6;            // printed slot key width (fits slot_w)
@@ -101,25 +101,34 @@ key_d = 1.5;            // printed slot key height; stays inside the lip
 
 // M5 hardware
 m5_clear = 5.5;
-m5_head_d = 10.5;       // ESTIMATE measure: button head diameter (9.5 nominal) + clearance
-m5_head_h = 3.2;        // ESTIMATE measure: button head height (2.75 nominal) + clearance
+// The bolts are pan head with a Phillips (PH2) drive, not hex button heads: every M5 needs a screwdriver in line with it.
+m5_head_d = 10.5;       // MEASURED 2026-11-17: pan head diameter 9.9, + clearance
+m5_head_h = 4.3;        // MEASURED 2026-11-17: pan head height 4.0, + clearance
 m5_min_thread = 3;      // minimum thread engagement in any T-nut
-bolt_long = 10;         // the longer of the two ordered lengths (M5x8, M5x10)
-tnut_w = 10.6;          // ESTIMATE measure a slide-in T-nut; pocket size across
-tnut_t = 5;             // ESTIMATE measure a slide-in T-nut; pocket depth
+bolt_long = 9.8;        // MEASURED 2026-11-17: real length under the head of an M5x10 (the M5x8 is 8.0)
+// The M5 nuts are drop-in: about 10 x 6 mm seen from above, with two corners cut. They go into the slot from the
+// front and turn to lock. A printed pocket must be narrow in one direction, or the nut spins in it.
+// (The M4 nuts of the corner brackets are drop-in too: 11.4 x 5.8, 4.1 thick.)
+tnut_w = 11.7;          // MEASURED 2026-11-17: M5 nut long diagonal 11.4, + clearance: pocket size, long way
+tnut_n = 6.4;           // MEASURED 2026-11-17: M5 nut 6.0 over its long sides, + clearance: pocket size, narrow way
+tnut_t = 4.4;           // MEASURED 2026-11-17: M5 nut 4.0 thick, + clearance: pocket size along the bolt
+tnut_len = 11.4;        // MEASURED 2026-11-17: M5 nut's longest extent along the slot, before it turns to lock
+tnut_recess = 0.5;      // MEASURED 2026-11-17 (by eye): the nut's top sits between the lips, this far below the profile face
+key_relief = tnut_len / 2 + 0.5; // no slot key within this distance of a bolt into the profile: the nut's centre is there
+m4_head_h = 2.5;        // ESTIMATE corner bracket bolt: M4 button head (2.5 mm key), 2.2 nominal + margin
 
 // ---- MG90S envelope ----------------------------------------------------------
 // Servo axes: shaft along the servo's own "height", body length along the ears.
-sv_l = 22.8;            // ESTIMATE measure: body length (along the ears)
-sv_w = 12.2;            // ESTIMATE measure: body width
-sv_h = 28.5;            // ESTIMATE measure: base to top face of the case, without shaft
-sv_ear_span = 32.3;     // ESTIMATE measure: ear tip to ear tip
-sv_ear_z = 18.5;        // ESTIMATE measure: base to the base-side face of the ears
-sv_ear_t = 2.5;         // ESTIMATE measure: ear thickness
-sv_hole_pitch = 27.8;   // ESTIMATE measure: ear hole centre to centre
+sv_l = 22.8;            // MEASURED 2026-11-17: body length (along the ears)
+sv_w = 12.5;            // MEASURED 2026-11-17: body width
+sv_h = 28.4;            // MEASURED 2026-11-17: base to top face of the case, without shaft
+sv_ear_span = 32.3;     // MEASURED 2026-11-17: ear tip to ear tip
+sv_ear_z = 18.2;        // MEASURED 2026-11-17: base to the base-side face of the ears
+sv_ear_t = 2.7;         // MEASURED 2026-11-17: ear thickness
+sv_hole_pitch = 27.8;   // MEASURED 2026-11-17: ear hole centre to centre
 sv_screw_pilot = 1.8;   // ESTIMATE pilot hole for the servo's own screws; test on a scrap
-sv_shaft_off = 5.9;     // ESTIMATE measure: shaft axis to the nearest end of the body
-sv_shaft_proud = 3.6;   // ESTIMATE measure: shaft top above the top face
+sv_shaft_off = 5.9;     // MEASURED 2026-11-17: shaft axis to the nearest end of the body
+sv_shaft_proud = 4.0;   // MEASURED 2026-11-17: shaft top above the top face
 sv_stall_kgcm = 2.2;    // ESTIMATE stall torque at 5 V; listings vary 1.8 to 2.2
 
 // ---- The horn pushes: eccentric cam on the stock horn, plus guided plunger ---
@@ -131,12 +140,15 @@ arm_len = 2.5;          // effective lever arm = cam eccentricity
 cam_r = 6.75;           // cam disc radius
 cam_t = 6;              // cam thickness (along the shaft)
 cam_mu = 0.3;           // ESTIMATE printed plastic sliding on printed plastic
-horn_seat = 4;          // ESTIMATE measure: servo top face to the horn's outer face with a horn fitted
-horn_t = 1.8;           // ESTIMATE measure: horn arm thickness
-horn_hub_d = 7.2;       // ESTIMATE measure: horn hub diameter
-horn_hub_h = 3.4;       // ESTIMATE measure: horn hub height
+horn_seat = 6;          // MEASURED 2026-11-17: servo top face to the outer end of a fitted horn's hub, without the screw
+horn_t = 2.1;           // MEASURED 2026-11-17: horn arm thickness
+horn_hub_d = 6.8;       // MEASURED 2026-11-17: horn hub diameter
+horn_hub_h = 4.9;       // MEASURED 2026-11-17: horn hub height; the hub reaches from the arm down towards the servo, outside the cam
+horn_arm_inset = 0.5;   // MEASURED 2026-11-17: the hub's outer end stands this far above the arm's outer face
+horn_screw_d = 2.5;     // MEASURED 2026-11-17: horn screw thread diameter; its thread is 4 mm long, head 0.8 mm high
+cam_floor = 0.8;        // cam material under the screw head; thin, because the stock screw is short
 horn_stub = 7.5;        // length of horn arm kept, from the axis (cut the rest off the stock single arm)
-horn_stub_w = 5;        // ESTIMATE measure: horn arm width there
+horn_stub_w = 5.5;      // MEASURED 2026-11-17: horn arm width there
 pl_w = 6;               // plunger square section
 pl_clear = 0.4;         // total clearance in the guide bore
 pl_collar = 9;          // plunger top collar width; stops it dropping out off the desk
@@ -148,10 +160,11 @@ guide_wall = 2.4;
 guide_clear = 3;        // guide underside above the unpressed button cap; limits downward adjustment
 
 // ---- Servo module: carriage on the rail + height-adjustable bracket ----------
-car_w = 13;             // carriage width (X)
-car_t = 8;              // carriage thickness (Y)
+car_w = 16;             // carriage width (X)
+car_t = 9;              // carriage thickness (Y)
 car_above = 16;         // carriage height above the rail, holds the height-adjust T-nut
-car_skin = car_t - tnut_t; // wall between the T-nut pocket and the bracket
+car_skin = 3;           // wall between the T-nut pocket and the bracket; the pocket is deeper than the nut, the bolt pulls the nut up to this wall
+rail_under_head = car_t - m5_head_h; // printed material under the head of a bolt into the rail (carriage and tensioner block)
 br_t = 3.5;             // bracket slotted plate thickness
 br_wall = 2.05;         // bracket side wall thickness
 br_slide = 0.15;        // side clearance of the bracket on the carriage
@@ -161,26 +174,26 @@ adj = 6;                // height adjustment, plus and minus
 br_back_rib = 4;        // side walls extend this far behind the servo plate
 
 // ---- Clamps ------------------------------------------------------------------
-jaw_t = 10;             // jaw thickness post to pad face
+jaw_t = 11;             // jaw thickness post to pad face
 jaw_w = 34;             // jaw width along the case side (Y)
 grip_h = 25;            // pad height on the case side wall
 lip_t = 5;              // lip over the rim
 lip_reach = 8;          // lip reach over the rim, kept short of the panel
-jaw_under_head = 4;     // jaw material under the bolt heads
+jaw_under_head = 4.8;   // jaw material under the bolt heads
 post_tail = 5;          // post length below the jaw
-bracket_leg = 20;       // ESTIMATE measure: corner bracket leg length
+bracket_leg = 19.6;     // MEASURED 2026-11-17: corner bracket leg length
 rail_end_margin = 5;    // rail beyond the tensioner block
 ten_gap_x = 0.5;        // tensioner neck to the outer corner bracket, along the rail
 ten_gap_z = 6.5;        // tensioner arm below the outer corner bracket, room for the bracket bolt key
-bracket_t = 3;          // ESTIMATE measure: corner bracket leg thickness (the bracket is a cube in the CAD)
-key_short_arm = 20;     // ESTIMATE measure: L-key for the bracket's M4x8 bolts (2.5 or 3 mm, unconfirmed), short arm length including the long arm's thickness
-key_engage = 2.5;       // ESTIMATE measure: how far the key goes into the button head
+bracket_t = 3;          // MEASURED 2026-11-17: corner bracket leg thickness (the bracket is a cube in the CAD)
+key_short_arm = 20.5;   // MEASURED 2026-11-17: 2.5 mm L-key for the bracket's M4x8 bolts, short arm length
+key_engage = 1.3;       // ESTIMATE how far the key goes into the M4 button head (ISO 7380 minimum)
 ten_collar_d = 9.5;     // stop collar outer diameter
 ten_collar_steps = [-0.4, -0.2, 0, 0.2]; // printed collar set, relative to the nominal thickness: thinner squeezes more
 ten_membrane = 0.2;     // printed skin closing the shoulder hole so the shoulder bridges cleanly; drill it out
 ten_neck = 16;          // tensioner neck length along the rail
 ten_w = 20;             // tensioner width (Y)
-ten_wall = 3;           // tensioner wall above and below the T-nut pocket
+ten_wall = 4;           // tensioner wall above and below the T-nut pocket
 ten_shoulder = 2;       // wall the T-nut bears on, with the push bolt head behind it
 ten_stub = 8;           // pressure pad stub section and length
 ten_plate_t = 3;        // pressure pad plate thickness, bridges the slot in the post
@@ -214,7 +227,8 @@ br_y1 = car_y1 + br_t;
 br_in = car_w / 2 + br_slide;
 br_w = 2 * (br_in + br_wall);
 cam_back_y = mod_d - cam_t / 2;
-sv_top_y = cam_back_y - (horn_seat - horn_t);
+horn_pocket = horn_t + horn_arm_inset;              // cam pocket depth: the cam's back face is level with the arm's servo-side face
+sv_top_y = cam_back_y - (horn_seat - horn_pocket);
 sv_base_y = sv_top_y - sv_h;
 sp_y0 = sv_base_y + sv_ear_z + sv_ear_t;
 sp_y1 = sp_y0 + sp_t;
@@ -240,8 +254,8 @@ post_spacing_target = case_w + 2 * jaw_case_x;      // inner face to inner face 
 
 // Derived: tensioner, local X measured outward from the post's outer face
 ten_arm_z1 = rail_z0 - bracket_leg - ten_gap_z;     // arm passes below the outer corner bracket
-ten_z = ten_arm_z1 - ten_wall - tnut_w / 2;         // push bolt axis
-ten_arm_z0 = ten_z - tnut_w / 2 - ten_wall;
+ten_z = ten_arm_z1 - ten_wall - tnut_n / 2;         // push bolt axis
+ten_arm_z0 = ten_z - tnut_n / 2 - ten_wall;
 ten_x0 = ten_plate_t;                               // arm's inner end with the pad fully back
 ten_nut_x0 = ten_x0 + ten_stub;
 ten_nut_x1 = ten_nut_x0 + tnut_t;
@@ -252,8 +266,7 @@ ten_travel = bolt_long - tnut_t - ten_shoulder;     // push bolt reach beyond th
 ten_collar_t = ten_travel - pad_squeeze;            // stop collar: head seats pad_squeeze past pad contact
 // ESTIMATE: lowest point of the L-key on the bracket's M4 rail bolt, against the arm below it. The bracket
 // is a cube here and the real one is a cast gusset, so access may be from the side or through its window.
-// m5_head_h stands in for the M4 head height (the larger of the two, so it is on the safe side).
-bracket_key_clearance = ten_gap_z + bracket_leg - (bracket_t + m5_head_h - key_engage + key_short_arm);
+bracket_key_clearance = ten_gap_z + bracket_leg - (bracket_t + m4_head_h - key_engage + key_short_arm);
 // Feeler gauge: go must fit (plastic is clear), no-go must not fit (the pad is compressed)
 gauge_go = jaw_case_x - 0.25;
 gauge_nogo = jaw_case_x + 0.35;
@@ -280,9 +293,9 @@ tb_leaf_z = -rp_t - 6;  // leaf top under the stem at rest
 tb_sockets = [["SC1", -1], ["SC2", -1], ["SC3", -1], ["SPREKEN", 1]]; // button, leaf direction in Y
 
 // ---- Speaker holder: Earson ER-151 -------------------------------------------
-spk_len = 150;          // ESTIMATE from web listings; measure: prism length
-spk_base = 56;          // ESTIMATE from web listings; measure: width of the driver face
-spk_h = 56;             // ESTIMATE from web listings; measure: driver face to opposite ridge
+spk_len = 149;          // MEASURED 2026-11-17: prism length
+spk_base = 54.5;        // MEASURED 2026-11-17: width of the driver face
+spk_h = 55;             // MEASURED 2026-11-17: driver face to opposite ridge
 spk_driver_pitch = 55;  // driver centres on the long face, symmetric about the face centre
 spk_driver_d = 38.1;    // 1.5 inch driver
 spk_clear = 0.8;        // cradle clearance per side
@@ -304,6 +317,14 @@ servo_margin = sv_stall_nmm / press_torque;
 assert(servo_margin >= 2, "servo force margin below 2x at this arm length");
 assert(cam_r + arm_len <= pitch_x / 2 - 0.25, "cams of neighbouring modules could touch");
 assert(cam_r - arm_len >= horn_hub_d / 2 + 0.15 + 0.4, "cam wall around the horn hub too thin");
+assert(horn_pocket <= horn_hub_h && horn_seat - horn_hub_h >= 0, "horn measurements do not add up");
+assert(cam_t - horn_pocket - cam_floor >= 1.5, "cam too thin for the horn pocket, its floor and the screw head counterbore");
+assert(car_w / 2 - key_relief >= 1.5 && ten_neck / 2 - key_relief >= 1.5, "no room for a slot key beside the T-nut");
+assert(key_d > tnut_recess, "slot key no longer needs its relief around the nut");
+assert(ten_z + m5_head_d / 2 + 0.1 <= ten_arm_z1 - 1.5, "tensioner head slot breaks through the top of the arm");
+assert(car_w - tnut_w >= 4, "carriage walls beside the T-nut pocket thinner than 2 mm");
+assert(jaw_under_head + m5_head_h <= jaw_t - pad_pocket, "jaw bolt head stands into the pad pocket");
+assert(bolt_long - ten_shoulder - ten_collar_t - max(ten_collar_steps) >= m5_min_thread, "push bolt thread engagement too short");
 assert(pad_squeeze <= 0.6 * (pad_t - pad_pocket), "pad_squeeze too close to jaw plastic touching the case");
 assert(ten_travel >= 2 * pad_squeeze, "tensioner travel too short for the squeeze");
 assert(ten_travel - ten_collar_t < pad_t - pad_pocket - 0.3, "stop collar lets the jaw plastic reach the case");
@@ -316,10 +337,10 @@ assert(ten_z + ten_plate_h / 2 <= rail_z0 - bracket_leg, "tensioner pad would hi
 assert(ten_arm_z0 > jaw_z1, "tensioner must stay above the jaw");
 assert(br_w < pitch_x, "module wider than the button pitch");
 assert(bolt_long - br_t - car_skin >= m5_min_thread, "height bolt thread engagement too short");
-assert(bolt_long - (car_t - m5_head_h) - slot_lip >= m5_min_thread, "carriage bolt thread engagement too short");
+assert(bolt_long - rail_under_head - slot_lip >= m5_min_thread, "rail bolt thread engagement too short");
 assert(bolt_long - jaw_under_head - slot_lip >= m5_min_thread, "clamp bolt thread engagement too short");
-assert(bolt_long - jaw_under_head <= slot_depth, "clamp bolt bottoms out in the slot");
-assert(bolt_long - (car_t - m5_head_h) <= slot_depth, "carriage bolt bottoms out in the slot");
+assert(bolt_long - jaw_under_head <= slot_depth - 0.3, "clamp bolt bottoms out in the slot");
+assert(bolt_long - rail_under_head <= slot_depth - 0.3, "rail bolt bottoms out in the slot");
 assert(sp_y1 <= car_y1, "servo plate must sit below the carriage");
 assert(lip_reach <= case_rim_w - 1, "clamp lip must stay on the rim");
 assert(grip_h + post_tail <= case_h - 10, "post would reach the table");

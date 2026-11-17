@@ -9,7 +9,7 @@ module box(x0, x1, y0, y1, z0, z1) {
 module ext2020(len) {
     linear_extrude(len) difference() {
         square(ext, center = true);
-        circle(d = ext_bore);
+        square(ext_bore, center = true);
         for (a = [0 : 90 : 270]) rotate(a) {
             translate([ext / 2 - slot_lip - 0.05, -slot_w / 2]) square([slot_lip + 0.1, slot_w]);
             translate([ext / 2 - slot_depth, -slot_cavity_w / 2]) square([slot_depth - slot_lip, slot_cavity_w]);
@@ -33,7 +33,8 @@ module servo_carriage() {
     difference() {
         union() {
             box(-car_w / 2, car_w / 2, car_y0, car_y1, rail_z0, car_z1);
-            box(-car_w / 2, car_w / 2, car_y0 - key_d, car_y0, rail_zc - key_w / 2, rail_zc + key_w / 2);
+            // slot key, left out where the T-nut's raised centre sits
+            for (s = [-1, 1]) box(s > 0 ? key_relief : -car_w / 2, s > 0 ? car_w / 2 : -key_relief, car_y0 - key_d, car_y0, rail_zc - key_w / 2, rail_zc + key_w / 2);
         }
         // rail bolt, head recessed so the bracket passes over it
         translate([0, 0, rail_zc]) rotate([-90, 0, 0]) {
@@ -42,7 +43,7 @@ module servo_carriage() {
         }
         // height bolt: T-nut pocket from the back, above the rail
         translate([0, 0, nut_z]) rotate([-90, 0, 0]) cylinder(d = m5_clear, h = car_y1 + 1);
-        box(-tnut_w / 2, tnut_w / 2, car_y0 - 1, car_y0 + tnut_t, nut_z - tnut_w / 2, nut_z + tnut_w / 2);
+        box(-tnut_w / 2, tnut_w / 2, car_y0 - 1, car_y1 - car_skin, nut_z - tnut_n / 2, nut_z + tnut_n / 2);
     }
 }
 
@@ -78,7 +79,7 @@ module servo_bracket() {
         // plunger guide bore
         translate([0, mod_d, 0]) box(-(pl_w + pl_clear) / 2, (pl_w + pl_clear) / 2,
             -(pl_w + pl_clear) / 2, (pl_w + pl_clear) / 2, sleeve_z0 - 1, sleeve_z1 + 1);
-        // adjust slot; also gives a hex key access to the rail bolt behind it
+        // adjust slot; also gives a screwdriver access to the rail bolt behind it
         hull() for (z = [rail_zc - adj, nut_z + adj]) translate([0, car_y1 - 1, z])
             rotate([-90, 0, 0]) cylinder(d = m5_clear, h = br_t + 2);
     }
@@ -92,10 +93,10 @@ cam_press_angle = acos((pl_len + btn_proud - btn_travel < z_shaft ? z_shaft - pl
 module servo_cam() {
     difference() {
         translate([arm_len, 0, 0]) cylinder(r = cam_r, h = cam_t);
-        translate([0, 0, -1]) cylinder(d = horn_hub_d + 0.3, h = horn_hub_h + 1);
+        translate([0, 0, -1]) cylinder(d = horn_hub_d + 0.3, h = horn_pocket + 1);
         translate([0, -(horn_stub_w + 0.3) / 2, -1]) cube([horn_stub + 0.3, horn_stub_w + 0.3, horn_t + 1]);
-        translate([0, 0, -1]) cylinder(d = 2.6, h = cam_t + 2);
-        translate([0, 0, horn_hub_h + 1.2]) cylinder(d = 5, h = cam_t);
+        translate([0, 0, -1]) cylinder(d = horn_screw_d + 0.3, h = cam_t + 2);
+        translate([0, 0, horn_pocket + cam_floor]) cylinder(d = 5, h = cam_t);
         // marks the eccentric direction on the front face
         translate([arm_len + cam_r - 1.5, -0.6, cam_t - 0.6]) cube([1.6, 1.2, 1]);
     }
@@ -122,8 +123,9 @@ module edge_clamp() {
             box(0, jaw_t, -jaw_w / 2, jaw_w / 2, jaw_z0, jaw_z1);
             // lip over the rim
             box(0, jaw_case_x + lip_reach, -jaw_w / 2, jaw_w / 2, lip_z0, jaw_z1);
-            // slot key along the post
-            box(-key_d, 0, -key_w / 2, key_w / 2, jaw_z0, jaw_z1);
+            // slot key along the post, left out where the T-nuts' raised centres sit
+            box(-key_d, 0, -key_w / 2, key_w / 2, jaw_bolt_z[1] + key_relief, jaw_z1);
+            box(-key_d, 0, -key_w / 2, key_w / 2, jaw_z0, jaw_bolt_z[0] - key_relief);
         }
         // side pad
         box(jaw_t - pad_pocket, jaw_t + 1, -jaw_w / 2 + 2, jaw_w / 2 - 2, jaw_z0 + 2, lip_z0 - 2);
@@ -152,21 +154,22 @@ module tensioner_block() {
         union() {
             box(ten_x0, ten_neck_x1, -ten_w / 2, ten_w / 2, ten_arm_z0, ten_arm_z1);
             box(ten_neck_x0, ten_neck_x1, -ten_w / 2, ten_w / 2, ten_arm_z1 - 0.01, rail_z0);
-            // slot key along the rail
-            box(ten_neck_x0, ten_neck_x1, -key_w / 2, key_w / 2, rail_z0, rail_z0 + key_d);
+            // slot key along the rail, left out where the T-nut's raised centre sits
+            box(ten_neck_x0, rail_bolt_x - key_relief, -key_w / 2, key_w / 2, rail_z0, rail_z0 + key_d);
+            box(rail_bolt_x + key_relief, ten_neck_x1, -key_w / 2, key_w / 2, rail_z0, rail_z0 + key_d);
         }
         // pad stub socket
         box(ten_x0 - 1, ten_nut_x0 + 0.01, -socket / 2, socket / 2, ten_z - socket / 2, ten_z + socket / 2);
         // captive T-nut, slides in from the +Y side
-        box(ten_nut_x0, ten_nut_x1, -tnut_w / 2, ten_w / 2 + 1, ten_z - tnut_w / 2, ten_z + tnut_w / 2);
+        box(ten_nut_x0, ten_nut_x1, -tnut_w / 2, ten_w / 2 + 1, ten_z - tnut_n / 2, ten_z + tnut_n / 2);
         // push bolt through the shoulder
         translate([ten_nut_x1 - 0.01, 0, ten_z]) rotate([0, 90, 0]) cylinder(d = m5_clear, h = ten_shoulder + 0.01 - ten_membrane);
-        // head slot: open outward for the hex key, open below for the rail bolt
+        // head slot: open outward for the screwdriver, open below for the rail bolt
         box(ten_head_x, ten_neck_x1 + 1, -head_half, head_half, ten_arm_z0 - 1, ten_z + head_half);
         // rail bolt, reached from below through the head slot
         translate([rail_bolt_x, 0, ten_z]) {
             cylinder(d = m5_clear, h = rail_z0 + key_d + 1 - ten_z);
-            cylinder(d = m5_head_d, h = rail_z0 - (car_t - m5_head_h) - ten_z);
+            cylinder(d = m5_head_d, h = rail_z0 - rail_under_head - ten_z);
         }
     }
 }
@@ -289,7 +292,7 @@ module speaker_cradle() {
         translate([0, 0, clamp_z0 - 1]) cylinder(d = clamp_bore, h = clamp_h + 2);
         for (s = [-1, 1]) translate([s * clamp_bolt_x, 0, (clamp_z0 + clamp_z1) / 2]) {
             rotate([90, 0, 0]) cylinder(d = m5_clear, h = 40);
-            box(-tnut_w / 2, tnut_w / 2, -tnut_t - clamp_nut_skin - clamp_gap / 2 - 1, -clamp_nut_skin - clamp_gap / 2, -tnut_w / 2, tnut_w / 2);
+            box(-tnut_w / 2, tnut_w / 2, -tnut_t - clamp_nut_skin - clamp_gap / 2 - 1, -clamp_nut_skin - clamp_gap / 2, -tnut_n / 2, tnut_n / 2);
         }
         // strap slots, outside the driver area
         for (s = [-1, 1]) translate([spk_x() + s * strap_x, 0, 0])

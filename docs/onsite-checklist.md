@@ -62,7 +62,7 @@ Run these with the real rig on the real SPREKEN button. After each one, turn any
 
 - [ ] Bench-test it on the replica: pull the adapter during a Spreken hold. Result: ____________________
 - [ ] Put the adapter and the desk on **one power strip** where possible. This covers mains loss only, not a pulled plug or a failed adapter.
-- [ ] **Manual recovery** if SPREKEN is stuck down: either lift the whole frame straight up off the desk with both hands (it is held by clamp friction; the CAD README (`hardware/cad/README.md`)'s estimate is about 33 N per side, under "Clamp grip", so measure the real pull first), or free just that button: loosen the module's height bolt with a hex key through the bracket slot (assembly step 8 in the CAD README (`hardware/cad/README.md`)) and slide the bracket up the carriage until the plunger is clear of the cap. The module route has only +6 mm of height travel and is **unproven: try it on the bench first**, and do not count on it until it has worked. PASS: the button comes up and the PA stops transmitting. Practise both on the replica first.
+- [ ] **Manual recovery** if SPREKEN is stuck down: either lift the whole frame straight up off the desk with both hands (it is held by clamp friction; the CAD README (`hardware/cad/README.md`)'s estimate is about 33 N per side, under "Clamp grip", so measure the real pull first), or free just that button: loosen the module's height bolt with a PH2 screwdriver (assembly step 8 in the CAD README (`hardware/cad/README.md`)) and slide the bracket up the carriage until the plunger is clear of the cap. The module route has only +6 mm of height travel and is **unproven: try it on the bench first**, and do not count on it until it has worked. PASS: the button comes up and the PA stops transmitting. Practise both on the replica first.
 
 ## 1. Power up and connect
 
@@ -170,6 +170,6 @@ The schedule spans both days, and what was already played or skipped is kept in 
 
 ## Parts still to get
 
-- EVA or rubber sheet, 3 mm (pads): Tim is getting it.
+- EVA sheet, 3 mm (pads): arrived, 3.0 mm thick, no adhesive backing.
 - Speaker strap: any velcro cable tie or elastic strap that fits the cradle slots, 3 x 18.8 mm.
 - M2x8 screws for the servo horns: only if the stock screw is too short with the cam fitted. Check on one servo first.
