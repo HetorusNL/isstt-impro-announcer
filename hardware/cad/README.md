@@ -64,7 +64,7 @@ Print the tensioner block standing on its outer end, as its file lays it out. Sl
 
 Print the gauge as laid out, so the blade thickness is in the print plane. Check both blades with calipers: go 11.45 mm, no-go 12.05 mm. If one is more than 0.1 mm off, sand it or reprint.
 
-Print the replica open side down. The plate bridges between the ribs. The leaf springs need 100 % infill and must lie flat, so the leaf thickness is a whole number of layers. Print the plungers and the cam with 5 walls: they carry the press force.
+Print the replica open side down. The plate bridges between the ribs. A 0.2 mm skin closes the four plunger holes at the plate's underside, so the bridge prints whole: cut it out with a hobby knife from below, along the hole's edges. The leaf springs need 100 % infill and must lie flat, so the leaf thickness is a whole number of layers. Print the plungers and the cam with 5 walls: they carry the press force.
 
 Print the bracket upright, with the plunger guide end on the bed, as its file lays it out. It is 95 mm tall and needs no supports: a 45 degree gusset carries the shelf, and the shelf and the top of the servo window are bridges of 16 and 13 mm between the side walls. Print the plunger upright too, with its collar on the bed. Print the carriage flat on its front face, the one the bracket slides on: the bolt holes are then vertical and the nut pocket and slot key face up. The ceiling of the head recess is a 10.5 mm bridge with a 0.2 mm skin closing the bolt hole, like on the tensioner block: drill it out with a 5.5 mm drill.
 

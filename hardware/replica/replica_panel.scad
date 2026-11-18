@@ -52,10 +52,11 @@ module replica_panel() {
             box(p[0] - leaf_tunnel_w / 2, p[0] + leaf_tunnel_w / 2, min(y_mouth, y_far) - (t[1] < 0 ? 0 : 1), max(y_mouth, y_far) + (t[1] < 0 ? 1 : 0),
                 z1 - tb_root_h - 0.2, z1 + 0.2);
         }
-        // plunger holes
+        // plunger holes. A printed skin closes each hole at the plate's underside, so the plate bridges
+        // whole between the ribs and the hole's walls have something to stand on: cut it out after printing
         for (t = tb_sockets) {
             p = btn_xy(t[0]);
-            box(p[0] - tb_stem / 2 - 0.2, p[0] + tb_stem / 2 + 0.2, p[1] - tb_stem / 2 - 0.2, p[1] + tb_stem / 2 + 0.2, -rp_t - 1, 1);
+            box(p[0] - tb_stem / 2 - 0.2, p[0] + tb_stem / 2 + 0.2, p[1] - tb_stem / 2 - 0.2, p[1] + tb_stem / 2 + 0.2, -rp_t + ten_membrane, 1);
         }
         // hinge pin holes: 1.75 mm filament
         for (c = covered_buttons) {
