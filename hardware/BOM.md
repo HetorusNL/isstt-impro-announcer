@@ -15,7 +15,7 @@ Shipping takes 2-4 weeks, so order early.
 | 4 | 2020 aluminium corner brackets (123-3D, cast gusset with centring lips and a window in the sloped face), with 2 M4×8 bolts and 2 M4 drop-in nuts each, so 8 of each — **arrived**, measured 2026-11-17 | Rigid joints between rails / clamp blocks (stiffer than printed joints). M4, not M5: the bracket nuts come on top of the 18 M5 nuts. The M4 bolts take a 2.5 mm hex key |
 | 20 + 50 + 50 | M5 drop-in T-nuts for 2020 (about 10×6 mm, go in from the front and turn to lock), M5×8 and M5×10 bolts — **arrived**, measured 2026-11-17: pan head with Phillips (PH2) drive, not hex button head | All printed parts mount with M5 into the slot; servos use their own MG90S screws. End caps are printed |
 | 1 | EVA foam sheet, high density, 3 mm — **arrived**: 3.0 mm thick, no adhesive backing | Clamp pads |
-| 4 + spare | M2.5x5 or M2.5x6 horn screws, same kind as the MG90S stock horn screw (pointed self-tapping or blunt machine thread) — **to buy** | Hold the cam on the horn. The stock screw is too short with the cam fitted |
+| 4 + spare | M2.5x10 horn screws — **arrived** | Hold the cam on the horn. The stock screw is too short with the cam fitted. Add an M2.5 washer under the head if one bottoms out in the shaft |
 | 1 | Speaker strap: any velcro cable tie or elastic strap that fits the cradle slots (3 × 18.8 mm) | Holds the ER-151 in the cradle |
 | (4) | M2×8 screws for the servo horns, **only if needed** | Only if the stock horn screw is too short with the cam fitted. Check on one servo first |
 

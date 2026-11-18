@@ -138,17 +138,23 @@ sv_stall_kgcm = 2.2;    // ESTIMATE stall torque at 5 V; listings vary 1.8 to 2.
 // pushes a plunger guided straight down. The cam eccentricity is the arm length.
 arm_len = 2.5;          // effective lever arm = cam eccentricity
 cam_r = 6.75;           // cam disc radius
-cam_t = 6;              // cam thickness (along the shaft)
+// cam_t (cam thickness along the shaft) is derived below, from the horn screw
 cam_mu = 0.3;           // ESTIMATE printed plastic sliding on printed plastic
 horn_seat = 6;          // MEASURED 2026-11-17: servo top face to the outer end of a fitted horn's hub, without the screw
 horn_t = 2.1;           // MEASURED 2026-11-17: horn arm thickness
 horn_hub_d = 6.8;       // MEASURED 2026-11-17: horn hub diameter
 horn_hub_h = 4.9;       // MEASURED 2026-11-17: horn hub height; the hub reaches from the arm down towards the servo, outside the cam
 horn_arm_inset = 0.5;   // MEASURED 2026-11-17: the hub's outer end stands this far above the arm's outer face
-horn_screw_d = 2.5;     // MEASURED 2026-11-17: horn screw thread diameter. The stock screw (4 mm thread) does not bite with the cam fitted: use M2.5x5 or x6
-cam_floor = 0.8;        // cam material under the screw head; thin, because the stock screw is short
+horn_pocket = horn_t + horn_arm_inset;              // cam pocket depth: the cam's back face is level with the arm's servo-side face
+horn_screw_d = 2.5;     // MEASURED 2026-11-17: horn screw thread diameter
+horn_screw_len = 10;    // MEASURED 2026-11-18: the M2.5x10 bought for the cam (the stock screw is too short)
+shaft_hole_depth = 4.5; // MEASURED 2026-11-18 (about): how far a screw goes into the servo shaft before it bottoms
+screw_engage = 4;       // thread wanted in the shaft: 0.5 short of bottoming, so the head clamps
+horn_hub_wall = horn_seat - sv_shaft_proud;         // hub end above the shaft end, 2.0: the screw passes it before the shaft
+cam_floor = horn_screw_len - horn_hub_wall - screw_engage; // cam material under the screw head, which sits on the cam's front face
+cam_t = horn_pocket + cam_floor;                    // cam thickness along the shaft
 horn_stub = 7.5;        // length of horn arm kept, from the axis (cut the rest off the stock single arm)
-horn_stub_w = 5.5;      // MEASURED 2026-11-17: horn arm width there
+horn_stub_w = 5.5;      // MEASURED 2026-11-17: horn arm width there. The arm tapers: tangent to the hub, this wide at horn_stub
 pl_w = 6;               // plunger square section
 pl_clear = 0.4;         // total clearance in the guide bore
 pl_collar = 9;          // plunger top collar width; stops it dropping out off the desk
@@ -227,7 +233,6 @@ br_y1 = car_y1 + br_t;
 br_in = car_w / 2 + br_slide;
 br_w = 2 * (br_in + br_wall);
 cam_back_y = mod_d - cam_t / 2;
-horn_pocket = horn_t + horn_arm_inset;              // cam pocket depth: the cam's back face is level with the arm's servo-side face
 sv_top_y = cam_back_y - (horn_seat - horn_pocket);
 sv_base_y = sv_top_y - sv_h;
 sp_y0 = sv_base_y + sv_ear_z + sv_ear_t;
@@ -318,7 +323,8 @@ assert(servo_margin >= 2, "servo force margin below 2x at this arm length");
 assert(cam_r + arm_len <= pitch_x / 2 - 0.25, "cams of neighbouring modules could touch");
 assert(cam_r - arm_len >= horn_hub_d / 2 + 0.15 + 0.4, "cam wall around the horn hub too thin");
 assert(horn_pocket <= horn_hub_h && horn_seat - horn_hub_h >= 0, "horn measurements do not add up");
-assert(cam_t - horn_pocket - cam_floor >= 1.5, "cam too thin for the horn pocket, its floor and the screw head counterbore");
+assert(cam_floor >= 1.5, "horn screw too short for the cam: thread would bottom out or not clamp");
+assert(screw_engage <= shaft_hole_depth - 0.3, "horn screw would bottom out in the shaft before the head clamps");
 assert(car_w / 2 - key_relief >= 1.5 && ten_neck / 2 - key_relief >= 1.5, "no room for a slot key beside the T-nut");
 assert(key_d > tnut_recess, "slot key no longer needs its relief around the nut");
 assert(ten_z + m5_head_d / 2 + 0.1 <= ten_arm_z1 - 1.5, "tensioner head slot breaks through the top of the arm");

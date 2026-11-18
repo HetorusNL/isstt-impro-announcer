@@ -97,9 +97,12 @@ module servo_cam() {
     difference() {
         translate([arm_len, 0, 0]) cylinder(r = cam_r, h = cam_t);
         translate([0, 0, -1]) cylinder(d = horn_hub_d + 0.3, h = horn_pocket + 1);
-        translate([0, -(horn_stub_w + 0.3) / 2, -1]) cube([horn_stub + 0.3, horn_stub_w + 0.3, horn_t + 1]);
+        // tapered arm: tangent to the hub, horn_stub_w wide where it is cut off
+        hull() {
+            translate([0, 0, -1]) cylinder(d = horn_hub_d + 0.3, h = horn_t + 1);
+            translate([horn_stub + 0.3 - 0.01, -(horn_stub_w + 0.3) / 2, -1]) cube([0.01, horn_stub_w + 0.3, horn_t + 1]);
+        }
         translate([0, 0, -1]) cylinder(d = horn_screw_d + 0.3, h = cam_t + 2);
-        translate([0, 0, horn_pocket + cam_floor]) cylinder(d = 5, h = cam_t);
         // marks the eccentric direction on the front face
         translate([arm_len + cam_r - 1.5, -0.6, cam_t - 0.6]) cube([1.6, 1.2, 1]);
     }
