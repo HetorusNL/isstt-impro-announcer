@@ -20,6 +20,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | `end_cap.scad` | Press-fit end cap: 2 rail ends, 2 post bottoms | 4 + spare | Black |
 | `speaker_cradle.scad` | ER-151 cradle, arm and fixed half of the tube clamp | 1 | Black |
 | `speaker_clamp_cap.scad` | Removable half of the tube clamp | 1 | Black |
+| `speaker_snap_test.scad` | Snap catch test: three cradle ends with different hook heights. Print before the cradle | 1 plate | Black |
 | `../replica/replica_panel.scad` | Replica of the desk top | 1 | Gray |
 | `../replica/test_button_plunger.scad` | Test button cap and snap stem | 4 | Jade White |
 | `../replica/test_button_leaf.scad` | Test button leaf spring | 4 + spare | Jade White |
@@ -31,7 +32,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 
 | Colour | Parts |
 |---|---|
-| Black (10101) | 2 jaws, 2 tensioner blocks, 2 tensioner pads, end caps, speaker cradle and clamp cap |
+| Black (10101) | 2 jaws, 2 tensioner blocks, 2 tensioner pads, end caps, speaker cradle and clamp cap, snap test plate |
 | Blue (10601) | 3 carriages and 3 brackets, for SC 1, SC 2 and SC 3 |
 | Pumpkin Orange (10301) | 1 carriage and 1 bracket, for SPREKEN |
 | Sunflower Yellow (10402) | 4 cams, 4 plungers and a spare: the moving parts |
@@ -228,7 +229,7 @@ If a measured `pitch_y` or `alarm_xy` trips the assert, the clearance is `pitch_
 
 ## Speaker holder
 
-The ER-151 slides into the cradle from the open side, then a strap holds it. The strap goes through the slots in the beam and around the prism outside the driver area. Any velcro cable tie or elastic strap that fits works: the slots are 3 x 18.8 mm.
+The ER-151 slides into the cradle from the open side and snaps in. Under the open corner of each cup, a tab continues the floor inward with a small hook. The prism's corner rides over the hook, the tab bends away, and the hook closes behind the corner. To take the speaker out, pull it straight back out of the open side, or press the tabs down with a thumb. The hook height (`spk_snap`) is an estimate: tune it with `speaker_snap_test.scad` before printing the cradle. It prints three cradle ends, at 0.6, 1.0 and 1.4 mm, with the number under the end wall. Push a speaker end into each, take the one that clicks in and holds but comes out by hand, and set `spk_snap` to it.
 
 - The driver face points at the mic head, at `mic_dist` (default 40 mm, spec 30 to 50 mm).
 - `mic_offset` is 0 for the mic centred between the drivers, or 27.5 for the mic in line with one driver.

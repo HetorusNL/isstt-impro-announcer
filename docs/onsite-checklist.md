@@ -171,5 +171,3 @@ The schedule spans both days, and what was already played or skipped is kept in 
 ## Parts still to get
 
 - EVA sheet, 3 mm (pads): arrived, 3.0 mm thick, no adhesive backing.
-- Speaker strap: any velcro cable tie or elastic strap that fits the cradle slots, 3 x 18.8 mm.
-- M2x8 screws for the servo horns: only if the stock screw is too short with the cam fitted. Check on one servo first.

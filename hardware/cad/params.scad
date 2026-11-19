@@ -314,6 +314,11 @@ clamp_gap_below_head = 10; // clamp top edge below the mic head
 clamp_h = 20;           // clamp height along the tube
 cup_lip = 8;            // cradle grips this far along each prism end
 cup_wall = 3;           // cradle wall
+// Snap catch: a flexible tab under each cup's open corner, with a hook the prism's corner snaps behind.
+spk_snap = 1.0;         // ESTIMATE hook height beyond the free play: how far the tab bends. Tune with speaker_snap_test.scad
+snap_tab_l = 18;        // tab length along the prism, inward from the cup
+snap_tab_t = 2;         // tab thickness: the direction it bends
+snap_hook_l = 6;        // hook length along the prism, at the tab's free end
 
 // ---- Checks true for every part ----------------------------------------------
 sv_stall_nmm = sv_stall_kgcm * 98.0665;             // 1 kg.cm = 98.0665 N.mm
@@ -354,6 +359,8 @@ assert(rp_h >= grip_h + post_tail, "replica too shallow for the posts");
 assert(rail_len + 2 * post_len + 2 * saw_kerf <= stock_len, "rail and posts do not fit the ordered 1 m");
 assert(mic_dist >= 30 && mic_dist <= 50, "mic distance outside 3-5 cm");
 assert(spk_driver_pitch / 2 + spk_driver_d / 2 <= spk_len / 2 - cup_lip, "cradle would cover a driver");
+assert(spk_driver_pitch / 2 + spk_driver_d / 2 <= spk_len / 2 - cup_lip - snap_tab_l, "snap tab would reach a driver");
+assert(1.5 * snap_tab_t * spk_snap / pow(snap_tab_l, 2) <= 0.01, "snap tab bends past 1 % strain: PLA may crack");
 for (a = actuated) {
     assert(len([for (c = covered_buttons) if (c == a) c]) == 0, str(a, " is a covered button, never actuate it"));
     assert(abs(abs(btn_xy(a)[1] - rail_y) - mod_d) < 0.01, str(a, " is not one row from the rail; the module cannot reach it"));

@@ -245,37 +245,60 @@ clamp_cap_t = 4;
 clamp_gap = 1;
 clamp_nut_skin = 1.5;
 spk_beam_y1 = -spk_base / 2 - spk_clear - cup_wall + 0.5;
-spk_beam_y0 = spk_beam_y1 - 4;
 spk_arm_y0 = spk_beam_y1 - 8;
+spk_beam_y0 = spk_arm_y0;   // the beam reaches back to the arm's face, so it lies on the bed when printed
 assert(bolt_long - clamp_cap_t - clamp_gap - clamp_nut_skin >= m5_min_thread, "speaker clamp bolt thread engagement too short");
 
 module spk_tri(c) {
     offset(delta = c) polygon([[-spk_base / 2, 0], [spk_base / 2, 0], [0, spk_h]]);
 }
 
-// One end of the cradle; the prism slides in from +Y and straps down.
-module spk_cup(s) {
-    x_face = s * spk_len / 2;
-    translate([spk_x() + x_face + (s > 0 ? -cup_lip : -spk_clear), 0, mic_dist])
-        rotate([90, 0, 90]) linear_extrude(cup_lip + spk_clear) difference() {
-            offset(r = cup_wall) spk_tri(spk_clear);
-            hull() {
-                spk_tri(spk_clear);
-                translate([200, 0]) spk_tri(spk_clear);
-            }
+// One end of the cradle; the prism slides in from +Y and snaps in. Built for the +X end
+// and mirrored for the other. Local axes: driver face plane at Z=0, prism end face at X=0.
+//
+// The cavity has spk_clear on every side, so the prism can lift 2 * spk_clear freely. The
+// hook stands that much plus spk_snap above the floor, so the tab bends spk_snap as the
+// prism's corner passes it: 45 degrees on the retaining side, 30 on the lead-in side.
+function snap_hook_h(snap) = 2 * spk_clear + snap;
+snap_y0 = spk_base / 2 + 0.2;   // retaining face starts just outside the prism's corner
+
+module snap_hook_2d(snap) {
+    h = snap_hook_h(snap);
+    polygon([[snap_y0, -spk_clear - 0.01], [snap_y0 + h, -spk_clear + h], [snap_y0 + h + 0.5, -spk_clear + h],
+             [snap_y0 + 1.5 * h + 0.5 + h * sqrt(3), -spk_clear - 0.01]]);
+}
+function snap_tab_y1(snap) = snap_y0 + 1.5 * snap_hook_h(snap) + 0.5 + snap_hook_h(snap) * sqrt(3);
+snap_tab_y0 = spk_base / 2 - 3;   // tab edge at its free end
+
+module spk_cup_end(snap) {
+    translate([-cup_lip, 0, 0]) rotate([90, 0, 90]) linear_extrude(cup_lip + spk_clear) difference() {
+        offset(r = cup_wall) spk_tri(spk_clear);
+        hull() {
+            spk_tri(spk_clear);
+            translate([200, 0]) spk_tri(spk_clear);
         }
+    }
     // end wall with a window, so the ports and buttons stay reachable
-    translate([spk_x() + x_face + (s > 0 ? spk_clear : -spk_clear - cup_wall), 0, mic_dist])
-        rotate([90, 0, 90]) linear_extrude(cup_wall) difference() {
-            offset(r = cup_wall) spk_tri(spk_clear);
-            offset(delta = -5) spk_tri(spk_clear);
-        }
+    translate([spk_clear, 0, 0]) rotate([90, 0, 90]) linear_extrude(cup_wall) difference() {
+        offset(r = cup_wall) spk_tri(spk_clear);
+        offset(delta = -5) spk_tri(spk_clear);
+    }
+    // snap tab: continues the floor inward from the cup, bends away from the prism. Its lower
+    // edge rises at 45 degrees towards the free end, so it prints without support.
+    x_tip = -cup_lip - snap_tab_l;
+    translate([0, 0, -spk_clear - snap_tab_t]) linear_extrude(snap_tab_t) polygon([
+        [-cup_lip + 1, snap_tab_y0 - snap_tab_l], [-cup_lip + 1, snap_tab_y1(snap)],
+        [x_tip, snap_tab_y1(snap)], [x_tip, snap_tab_y0], [-cup_lip, snap_tab_y0 - snap_tab_l]]);
+    translate([x_tip, 0, 0]) rotate([90, 0, 90]) linear_extrude(snap_hook_l) snap_hook_2d(snap);
+}
+
+module spk_cup(s, snap = spk_snap) {
+    translate([spk_x() + s * spk_len / 2, 0, mic_dist]) mirror([s < 0 ? 1 : 0, 0, 0]) spk_cup_end(snap);
 }
 
 module speaker_cradle() {
     beam_z0 = mic_dist - spk_clear - cup_wall;
     beam_z1 = mic_dist + 18;
-    strap_x = (spk_driver_pitch / 2 + spk_driver_d / 2 + spk_len / 2 - cup_lip) / 2;
     difference() {
         union() {
             spk_cup(1);
@@ -300,9 +323,6 @@ module speaker_cradle() {
             rotate([90, 0, 0]) cylinder(d = m5_clear, h = 40);
             box(-tnut_w / 2, tnut_w / 2, -tnut_t - clamp_nut_skin - clamp_gap / 2 - 1, -clamp_nut_skin - clamp_gap / 2, -tnut_n / 2, tnut_n / 2);
         }
-        // strap slots, outside the driver area
-        for (s = [-1, 1]) translate([spk_x() + s * strap_x, 0, 0])
-            box(-1.5, 1.5, spk_beam_y0 - 1, spk_beam_y1 + 1, beam_z0 + 1.5, beam_z1 - 1.5);
     }
 }
 
