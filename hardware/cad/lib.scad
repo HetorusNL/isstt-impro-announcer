@@ -232,7 +232,7 @@ module end_cap() {
 }
 
 // ---- Speaker holder, local axes: mic head tip at the origin, tube along -Z,
-// prism long axis along X, driver face at Z=mic_dist facing the mic.
+// prism long axis along X, the mesh at Z=mic_dist facing the mic.
 
 function spk_x() = -mic_offset;
 clamp_z1 = -mic_head_len - clamp_gap_below_head;
@@ -249,56 +249,63 @@ spk_arm_y0 = spk_beam_y1 - 8;
 spk_beam_y0 = spk_arm_y0;   // the beam reaches back to the arm's face, so it lies on the bed when printed
 assert(bolt_long - clamp_cap_t - clamp_gap - clamp_nut_skin >= m5_min_thread, "speaker clamp bolt thread engagement too short");
 
+spk_face_z = mic_dist - spk_face_inset;   // the rubber ends' face, which the cups hold
+
+// Rubber end profile, face on Z=0 centred on Y=0, grown by c all round
 module spk_tri(c) {
-    offset(delta = c) polygon([[-spk_base / 2, 0], [spk_base / 2, 0], [0, spk_h]]);
+    offset(r = spk_r + c) polygon([[-spk_end_s / 2, spk_r], [spk_end_s / 2, spk_r], [0, spk_r + spk_end_s * sqrt(3) / 2]]);
 }
 
 // One end of the cradle; the prism slides in from +Y and snaps in. Built for the +X end
 // and mirrored for the other. Local axes: driver face plane at Z=0, prism end face at X=0.
 //
-// The cavity has spk_clear on every side, so the prism can lift 2 * spk_clear freely. The
-// hook stands that much plus spk_snap above the floor, so the tab bends spk_snap as the
-// prism's corner passes it: 45 degrees on the retaining side, 30 on the lead-in side.
-function snap_hook_h(snap) = 2 * spk_clear + snap;
-snap_y0 = spk_base / 2 + 0.2;   // retaining face starts just outside the prism's corner
+// The cavity has clearance c on every side, so the prism can lift 2 * c freely. The hook
+// stands that much plus spk_snap above the floor, so the tab bends spk_snap as the prism's
+// corner passes it: 45 degrees on the retaining side, 30 on the lead-in side.
+function snap_hook_h(snap, c = spk_clear) = 2 * c + snap;
+// Retaining face foot: the 45 degree face must clear the round corner up to the hook's top,
+// with the prism against the closed side. Any further out only adds play.
+function snap_corner_reach(h) = max([for (i = [0 : 20]) let (z = h * i / 20) sqrt(max(0, 2 * spk_r * z - z * z)) - z]);
+function snap_y0(snap, c = spk_clear) = spk_end_s / 2 + snap_corner_reach(snap_hook_h(snap, c)) + 0.1;
 
-module snap_hook_2d(snap) {
-    h = snap_hook_h(snap);
-    polygon([[snap_y0, -spk_clear - 0.01], [snap_y0 + h, -spk_clear + h], [snap_y0 + h + 0.5, -spk_clear + h],
-             [snap_y0 + 1.5 * h + 0.5 + h * sqrt(3), -spk_clear - 0.01]]);
+module snap_hook_2d(snap, c) {
+    h = snap_hook_h(snap, c);
+    y0 = snap_y0(snap, c);
+    polygon([[y0, -c - 0.01], [y0 + h, -c + h], [y0 + h + 0.5, -c + h],
+             [y0 + 1.5 * h + 0.5 + h * sqrt(3), -c - 0.01]]);
 }
-function snap_tab_y1(snap) = snap_y0 + 1.5 * snap_hook_h(snap) + 0.5 + snap_hook_h(snap) * sqrt(3);
-snap_tab_y0 = spk_base / 2 - 3;   // tab edge at its free end
+function snap_tab_y1(snap, c) = snap_y0(snap, c) + 1.5 * snap_hook_h(snap, c) + 0.5 + snap_hook_h(snap, c) * sqrt(3);
 
-module spk_cup_end(snap) {
-    translate([-cup_lip, 0, 0]) rotate([90, 0, 90]) linear_extrude(cup_lip + spk_clear) difference() {
-        offset(r = cup_wall) spk_tri(spk_clear);
+module spk_cup_end(snap = spk_snap, c = spk_clear) {
+    translate([-cup_lip, 0, 0]) rotate([90, 0, 90]) linear_extrude(cup_lip + c) difference() {
+        offset(r = cup_wall) spk_tri(c);
         hull() {
-            spk_tri(spk_clear);
-            translate([200, 0]) spk_tri(spk_clear);
+            spk_tri(c);
+            translate([200, 0]) spk_tri(c);
         }
     }
     // end wall with a window, so the ports and buttons stay reachable
-    translate([spk_clear, 0, 0]) rotate([90, 0, 90]) linear_extrude(cup_wall) difference() {
-        offset(r = cup_wall) spk_tri(spk_clear);
-        offset(delta = -5) spk_tri(spk_clear);
+    translate([c, 0, 0]) rotate([90, 0, 90]) linear_extrude(cup_wall) difference() {
+        offset(r = cup_wall) spk_tri(c);
+        offset(delta = -5) spk_tri(c);
     }
     // snap tab: continues the floor inward from the cup, bends away from the prism. Its lower
     // edge rises at 45 degrees towards the free end, so it prints without support.
     x_tip = -cup_lip - snap_tab_l;
-    translate([0, 0, -spk_clear - snap_tab_t]) linear_extrude(snap_tab_t) polygon([
-        [-cup_lip + 1, snap_tab_y0 - snap_tab_l], [-cup_lip + 1, snap_tab_y1(snap)],
-        [x_tip, snap_tab_y1(snap)], [x_tip, snap_tab_y0], [-cup_lip, snap_tab_y0 - snap_tab_l]]);
-    translate([x_tip, 0, 0]) rotate([90, 0, 90]) linear_extrude(snap_hook_l) snap_hook_2d(snap);
+    tab_y0 = snap_y0(snap, c) - 6;   // tab edge at its free end
+    translate([0, 0, -c - snap_tab_t]) linear_extrude(snap_tab_t) polygon([
+        [-cup_lip + 1, tab_y0 - snap_tab_l], [-cup_lip + 1, snap_tab_y1(snap, c)],
+        [x_tip, snap_tab_y1(snap, c)], [x_tip, tab_y0], [-cup_lip, tab_y0 - snap_tab_l]]);
+    translate([x_tip, 0, 0]) rotate([90, 0, 90]) linear_extrude(snap_hook_l) snap_hook_2d(snap, c);
 }
 
 module spk_cup(s, snap = spk_snap) {
-    translate([spk_x() + s * spk_len / 2, 0, mic_dist]) mirror([s < 0 ? 1 : 0, 0, 0]) spk_cup_end(snap);
+    translate([spk_x() + s * spk_len / 2, 0, spk_face_z]) mirror([s < 0 ? 1 : 0, 0, 0]) spk_cup_end(snap, spk_clear);
 }
 
 module speaker_cradle() {
-    beam_z0 = mic_dist - spk_clear - cup_wall;
-    beam_z1 = mic_dist + 18;
+    beam_z0 = spk_face_z - spk_clear - cup_wall;
+    beam_z1 = spk_face_z + 18;
     difference() {
         union() {
             spk_cup(1);

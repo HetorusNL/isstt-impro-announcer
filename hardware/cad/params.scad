@@ -298,13 +298,23 @@ tb_leaf_z = -rp_t - 6;  // leaf top under the stem at rest
 tb_sockets = [["SC1", -1], ["SC2", -1], ["SC3", -1], ["SPREKEN", 1]]; // button, leaf direction in Y
 
 // ---- Speaker holder: Earson ER-151 -------------------------------------------
-spk_len = 149;          // MEASURED 2026-11-17: prism length
-spk_base = 54.5;        // MEASURED 2026-11-17: width of the driver face
-spk_h = 55;             // MEASURED 2026-11-17: driver face to opposite ridge
+// The ER-151 is an equilateral triangle with round corners: rubber end parts, and a narrower mesh
+// section between them. Shape from the Thingiverse bike holder (thing 2039735, its .scad), sizes
+// measured on the speaker.
+spk_len = 149;          // MEASURED 2026-11-17: overall length, end to end
+spk_r = 11.25;          // MEASURED 2026-11-19: corner radius, a coin of 22 to 23 mm matches the rounding
+spk_end_w = 61;         // MEASURED 2026-11-19: rubber end, width over a face
+spk_end_s = spk_end_w - 2 * spk_r;                  // corner centre spacing on the rubber ends: 39.5
+spk_mesh_w = 54.5;      // MEASURED 2026-11-19: mesh section, width over a face (54.5, 54.5 and 55.4)
+spk_mesh_s = spk_mesh_w - 2 * spk_r;                // corner centre spacing on the mesh section, same corner radius assumed
+spk_end_len = 25;       // MEASURED 2026-11-19: length of each rubber end part
+spk_base = spk_end_w;                               // rubber end, width over a face
+spk_h = spk_end_s * sqrt(3) / 2 + 2 * spk_r;        // rubber end, face to opposite corner: 55.8
+spk_face_inset = (spk_end_s - spk_mesh_s) / (2 * sqrt(3)); // mesh face behind the rubber end's face: 1.9
 spk_driver_pitch = 55;  // driver centres on the long face, symmetric about the face centre
 spk_driver_d = 38.1;    // 1.5 inch driver
-spk_clear = 0.8;        // cradle clearance per side
-mic_dist = 40;          // driver face to mic head tip; spec: 30 to 50
+spk_clear = 0.2;        // TESTED 2026-11-20: cradle clearance per side (0.4, 0.6 and 0.8 rattle)
+mic_dist = 40;          // driver face (the mesh) to mic head tip; spec: 30 to 50
 mic_offset = 0;         // 0 = mic centred between the drivers, spk_driver_pitch / 2 = mic on one driver
 tube_d = 12.5;          // MEASURED 2026-11-12: gooseneck tube outer diameter
 tube_lining = 1;        // EVA or rubber lining in the clamp, per side
@@ -312,13 +322,13 @@ mic_head_d = 32;        // MEASURED 2026-11-12: mic head diameter
 mic_head_len = 45;      // MEASURED 2026-11-12: mic head length
 clamp_gap_below_head = 10; // clamp top edge below the mic head
 clamp_h = 20;           // clamp height along the tube
-cup_lip = 8;            // cradle grips this far along each prism end
+cup_lip = 6;            // cradle grips this far along each rubber end part
 cup_wall = 3;           // cradle wall
 // Snap catch: a flexible tab under each cup's open corner, with a hook the prism's corner snaps behind.
-spk_snap = 1.0;         // ESTIMATE hook height beyond the free play: how far the tab bends. Tune with speaker_snap_test.scad
-snap_tab_l = 18;        // tab length along the prism, inward from the cup
-snap_tab_t = 2;         // tab thickness: the direction it bends
-snap_hook_l = 6;        // hook length along the prism, at the tab's free end
+spk_snap = 1.8;         // TESTED 2026-11-20: hook height beyond the free play, how far the tab bends. Hook 2.2 mm tall, as on the 0.6 test piece
+snap_tab_l = 16.8;      // tab length along the prism, inward from the cup: as long as the rubber end allows
+snap_tab_t = 1.6;       // tab thickness: the direction it bends
+snap_hook_l = 5;        // hook length along the prism, at the tab's free end
 
 // ---- Checks true for every part ----------------------------------------------
 sv_stall_nmm = sv_stall_kgcm * 98.0665;             // 1 kg.cm = 98.0665 N.mm
@@ -360,7 +370,9 @@ assert(rail_len + 2 * post_len + 2 * saw_kerf <= stock_len, "rail and posts do n
 assert(mic_dist >= 30 && mic_dist <= 50, "mic distance outside 3-5 cm");
 assert(spk_driver_pitch / 2 + spk_driver_d / 2 <= spk_len / 2 - cup_lip, "cradle would cover a driver");
 assert(spk_driver_pitch / 2 + spk_driver_d / 2 <= spk_len / 2 - cup_lip - snap_tab_l, "snap tab would reach a driver");
-assert(1.5 * snap_tab_t * spk_snap / pow(snap_tab_l, 2) <= 0.01, "snap tab bends past 1 % strain: PLA may crack");
+assert(cup_lip + snap_tab_l + spk_clear <= spk_end_len - 2, "snap hook must catch the rubber end, not the mesh section");
+// PLA yields at about 3 to 4 % strain; the cradle snaps on a handful of times, so 2 % leaves margin
+assert(1.5 * snap_tab_t * spk_snap / pow(snap_tab_l, 2) <= 0.02, "snap tab bends past 2 % strain: PLA may crack");
 for (a = actuated) {
     assert(len([for (c = covered_buttons) if (c == a) c]) == 0, str(a, " is a covered button, never actuate it"));
     assert(abs(abs(btn_xy(a)[1] - rail_y) - mod_d) < 0.01, str(a, " is not one row from the rail; the module cannot reach it"));
