@@ -14,6 +14,10 @@ import tomli_w
 FORBIDDEN_NAME_PARTS = ("KOPPEL", "ONTRUIM", "ALARM")  # must never get an actuator
 ALLOWED_PLACEHOLDERS = {"time", "count", "fields", "halls"}
 REQUIRED_MESSAGES = ("match_start", "match_end")
+ENGLISH_VOICES = ("af_bella", "jf_alpha")
+JA_SUFFIX = "_ja"  # message key of a fixed Japanese phrase: match_start -> match_start_ja
+MIN_SPEED, MAX_SPEED = 0.5, 2.0  # Kokoro's speed range
+MAX_PAUSE_S = 5.0
 # sample values with the same types as planner.render_message, for a trial render
 SAMPLE_RENDER = {"time": "09:00", "count": 1, "fields": "Field 1", "halls": "SC1"}
 MAX_ANGLE = 180
@@ -58,9 +62,16 @@ class Announce:
 
 @dataclass
 class Tts:
-    voice_model: str = "voices/en_US-lessac-medium.onnx"
-    length_scale: float = 1.0
+    model: str = "voices/kokoro-v1.0.onnx"
+    voices: str = "voices/voices-v1.0.bin"
     cache_dir: str = "cache/tts"
+    english: bool = True
+    english_voice: str = "af_bella"
+    english_speed: float = 1.0
+    japanese: bool = True
+    japanese_voice: str = "jf_alpha"
+    japanese_speed: float = 1.0
+    pause_seconds: float = 0.5
 
 
 @dataclass
@@ -118,6 +129,31 @@ def _check_template(name: str, template: str) -> None:
         template.format_map(SAMPLE_RENDER)
     except Exception as e:  # e.g. a format spec that does not fit the value: {fields:d}
         raise ConfigError(f"message {name!r} cannot be rendered: {e}") from e
+
+
+def ja_key(kind: str) -> str:
+    return kind + JA_SUFFIX
+
+
+def _check_ja_phrase(name: str, phrase: str) -> None:
+    try:
+        fields_ = [f for _, f, _, _ in string.Formatter().parse(phrase) if f is not None]
+    except ValueError:
+        fields_ = ["?"]
+    if fields_:
+        raise ConfigError(
+            f"message {name!r}: Japanese messages are fixed phrases, without {{ or }}"
+        )
+
+
+def _check_tts(t: Tts) -> None:
+    if t.english_voice not in ENGLISH_VOICES:
+        raise ConfigError(f"tts.english_voice {t.english_voice!r} must be one of {ENGLISH_VOICES}")
+    for name in ("english_speed", "japanese_speed"):
+        if not MIN_SPEED <= getattr(t, name) <= MAX_SPEED:
+            raise ConfigError(f"tts.{name} must be in {MIN_SPEED}..{MAX_SPEED}")
+    if not 0 <= t.pause_seconds <= MAX_PAUSE_S:
+        raise ConfigError(f"tts.pause_seconds must be in 0..{MAX_PAUSE_S:g}")
 
 
 def _is_forbidden(name: str) -> bool:
@@ -183,7 +219,11 @@ def validate(cfg: Config) -> None:
         if key not in cfg.messages:
             raise ConfigError(f"message {key!r} is required")
     for name, template in cfg.messages.items():
-        _check_template(name, template)
+        if name.endswith(JA_SUFFIX):
+            _check_ja_phrase(name, template)
+        else:
+            _check_template(name, template)
+    _check_tts(cfg.tts)
     # schedule
     for round_name, minutes in cfg.schedule.round_minutes.items():
         if not isinstance(minutes, int) or minutes <= 0:

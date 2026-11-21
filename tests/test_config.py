@@ -24,6 +24,8 @@ def test_example_config_loads():
     assert cfg.messages["match_start"] == "Referees, you may start the matches."
     assert cfg.messages["match_end"] == "Referees, you may end the matches."
     assert cfg.actuators["SPREKEN"].channel == 3
+    assert cfg.messages["match_start_ja"] == "審判の皆さん、試合を開始してください。"
+    assert cfg.messages["match_end_ja"] == "審判の皆さん、試合を終了してください。"
 
 
 def test_roundtrip(tmp_path):
@@ -241,3 +243,47 @@ def test_travel_minimum_is_only_for_spreken():
     cfg = _valid_config()
     cfg.actuators["SC1"].rest = 65
     validate(cfg)
+
+
+@pytest.mark.parametrize("phrase", ["試合{time}", "試合{"])
+def test_ja_message_with_placeholder_rejected(phrase):
+    cfg = _valid_config()
+    cfg.messages["match_start_ja"] = phrase
+    with pytest.raises(ConfigError, match="match_start_ja"):
+        validate(cfg)
+
+
+def test_ja_messages_optional():
+    cfg = _valid_config()
+    for key in [k for k in cfg.messages if k.endswith("_ja")]:
+        del cfg.messages[key]
+    validate(cfg)
+
+
+def test_unknown_english_voice_rejected():
+    cfg = _valid_config()
+    cfg.tts.english_voice = "am_michael"
+    with pytest.raises(ConfigError, match="english_voice"):
+        validate(cfg)
+
+
+@pytest.mark.parametrize("field", ["english_speed", "japanese_speed"])
+@pytest.mark.parametrize("speed", [0.4, 2.1])
+def test_speed_out_of_range_rejected(field, speed):
+    cfg = _valid_config()
+    setattr(cfg.tts, field, speed)
+    with pytest.raises(ConfigError, match=field):
+        validate(cfg)
+
+
+def test_negative_pause_rejected():
+    cfg = _valid_config()
+    cfg.tts.pause_seconds = -0.1
+    with pytest.raises(ConfigError, match="pause_seconds"):
+        validate(cfg)
+
+
+def test_old_piper_tts_keys_rejected(tmp_path):
+    text = _example_text().replace("[tts]", '[tts]\nvoice_model = "voices/en_US-lessac-medium.onnx"')
+    with pytest.raises(ConfigError, match="voice_model"):
+        load(_write(tmp_path, text))

@@ -737,7 +737,7 @@ async def test_reload_config_rebuilds_tts_when_tts_settings_change(tmp_path):
         await engine.reload_config(same)  # tts settings unchanged: keep the instance
         assert built == []
         new = make_cfg()
-        new.tts.length_scale = 1.3
+        new.tts.english_speed = 1.3
         await engine.reload_config(new)
         assert built == [new.tts]
         await engine.manual_text(["SC1"], "new voice")

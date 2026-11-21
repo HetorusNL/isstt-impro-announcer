@@ -36,11 +36,22 @@ merge_window_seconds = 30
 [messages]
 match_start = "Referees, you may start the matches."
 match_end = "Referees, you may end the matches."
+# fixed Japanese phrases, spoken before the English; no placeholders; empty = no Japanese
+match_start_ja = "審判の皆さん、試合を開始してください。"
+match_end_ja = "審判の皆さん、試合を終了してください。"
 
+# Kokoro speech, offline; the model files go in voices/ (see README)
 [tts]
-voice_model = "voices/en_US-lessac-medium.onnx"
-length_scale = 1.0
+model = "voices/kokoro-v1.0.onnx"
+voices = "voices/voices-v1.0.bin"
 cache_dir = "cache/tts"
+english = true              # speak the English part
+english_voice = "af_bella"  # "af_bella" or "jf_alpha"
+english_speed = 1.0         # 0.5 .. 2.0
+japanese = true             # speak the Japanese part
+japanese_voice = "jf_alpha"
+japanese_speed = 1.0        # 0.5 .. 2.0
+pause_seconds = 0.5         # between the Japanese and the English part
 
 [audio]
 volume = 1.0
