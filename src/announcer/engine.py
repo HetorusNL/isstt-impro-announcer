@@ -49,8 +49,8 @@ class HistoryEntry:
     detail: str = ""
 
 
-def _piper_tts(tts_cfg: TtsConfig) -> Synth:
-    return Tts(Path(tts_cfg.voice_model), tts_cfg.length_scale, Path(tts_cfg.cache_dir))
+def _kokoro_tts(tts_cfg: TtsConfig) -> Synth:
+    return Tts(tts_cfg)
 
 
 async def _settle(task: asyncio.Task[None]) -> None:
@@ -78,7 +78,7 @@ class Engine:
         clock: Clock,
         tts_factory: Callable[[TtsConfig], Synth] | None = None,
     ) -> None:
-        """tts_factory builds a new Tts when reload_config changes cfg.tts (default: Piper Tts)."""
+        """tts_factory builds a new Tts when reload_config changes cfg.tts (default: Kokoro Tts)."""
         self.cfg = cfg
         self._source = source
         self._store_path = Path(store_path)
@@ -86,7 +86,7 @@ class Engine:
         self._ctrl = ctrl
         self._player = player
         self._tts = tts
-        self._tts_factory = tts_factory or _piper_tts
+        self._tts_factory = tts_factory or _kokoro_tts
         self._clock = clock
 
         # state for the GUI

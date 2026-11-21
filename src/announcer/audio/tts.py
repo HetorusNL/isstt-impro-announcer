@@ -1,64 +1,98 @@
-"""Piper TTS with an on-disk cache keyed by voice model, speech rate and text."""
+"""Kokoro TTS for English and Japanese, with an on-disk cache.
+
+The cache key holds the model, voice, language, speed and text, so changing a voice or a
+speed never plays an old file. Japanese text is turned into phonemes with misaki's
+JAG2P (cutlet + fugashi + unidic-lite): it works offline, unlike misaki's pyopenjtalk
+mode, which downloads a dictionary on first use.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import sys
-import wave
 from pathlib import Path
 from typing import Any
 
+from announcer.config import Tts as TtsConfig
+from announcer.speech import Lang
+
+KOKORO_LANG = {"en": "en-us", "ja": "ja"}
+
 
 class Tts:
-    def __init__(self, voice_model: Path, length_scale: float, cache_dir: Path) -> None:
-        self.voice_model = Path(voice_model)
-        self.length_scale = length_scale
-        self.cache_dir = Path(cache_dir)
-        self._voice: Any = None
+    def __init__(self, cfg: TtsConfig) -> None:
+        self.cfg = cfg
+        self.cache_dir = Path(cfg.cache_dir)
+        self._kokoro: Any = None
+        self._g2p: Any = None
         self._lock = asyncio.Lock()
 
-    def cache_path(self, text: str) -> Path:
-        key = f"{self.voice_model}|{self.length_scale}|{text}"
+    def _voice(self, lang: Lang) -> tuple[str, float]:
+        if lang == "ja":
+            return self.cfg.japanese_voice, self.cfg.japanese_speed
+        return self.cfg.english_voice, self.cfg.english_speed
+
+    def cache_path(self, text: str, lang: Lang) -> Path:
+        voice, speed = self._voice(lang)
+        key = f"kokoro|{self.cfg.model}|{voice}|{lang}|{speed}|{text}"
         return self.cache_dir / f"{hashlib.sha256(key.encode('utf-8')).hexdigest()}.wav"
 
-    def _load_voice(self) -> Any:
-        from piper import PiperVoice
+    def _load_kokoro(self) -> Any:
+        from kokoro_onnx import Kokoro
 
-        return PiperVoice.load(self.voice_model)
+        return Kokoro(self.cfg.model, self.cfg.voices)
 
-    def _synth_to(self, text: str, path: Path) -> None:
-        from piper import SynthesisConfig
+    def _load_g2p(self) -> Any:
+        from misaki import ja
 
-        if self._voice is None:
-            self._voice = self._load_voice()
+        return ja.JAG2P()
+
+    def _synth_to(self, text: str, lang: Lang, path: Path) -> None:
+        import soundfile as sf
+
+        if self._kokoro is None:
+            self._kokoro = self._load_kokoro()
+        voice, speed = self._voice(lang)
+        if lang == "ja":
+            if self._g2p is None:
+                self._g2p = self._load_g2p()
+            phonemes, _ = self._g2p(text)
+            samples, rate = self._kokoro.create(
+                phonemes, voice=voice, speed=speed, lang=KOKORO_LANG[lang], is_phonemes=True
+            )
+        else:
+            samples, rate = self._kokoro.create(
+                text, voice=voice, speed=speed, lang=KOKORO_LANG[lang], is_phonemes=False
+            )
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
-        with wave.open(str(tmp), "wb") as wav_file:
-            self._voice.synthesize_wav(
-                text, wav_file, syn_config=SynthesisConfig(length_scale=self.length_scale)
-            )
+        sf.write(tmp, samples, rate, subtype="PCM_16", format="WAV")
         tmp.replace(path)
 
-    async def synth(self, text: str) -> Path:
-        path = self.cache_path(text)
+    async def synth(self, text: str, lang: Lang) -> Path:
+        path = self.cache_path(text, lang)
         async with self._lock:
             if not path.exists():
-                await asyncio.to_thread(self._synth_to, text, path)
+                await asyncio.to_thread(self._synth_to, text, lang, path)
         return path
 
 
-async def _main(text: str) -> None:
+async def _main(lang: Lang, text: str) -> None:
     from announcer.audio.player import SoundPlayer
     from announcer.config import Config
 
     cfg = Config()
-    tts = Tts(Path(cfg.tts.voice_model), cfg.tts.length_scale, Path(cfg.tts.cache_dir))
-    path = await tts.synth(text)
+    path = await Tts(cfg.tts).synth(text, lang)
     player = SoundPlayer(cfg.audio.device, cfg.audio.volume)
     print(f"{path} ({player.duration(path):.2f} s)")
     await player.play(path)
 
 
 if __name__ == "__main__":
-    asyncio.run(_main(sys.argv[1] if len(sys.argv) > 1 else "Referees, you may start the matches."))
+    # python -m announcer.audio.tts [en|ja] "text"
+    args = sys.argv[1:]
+    lang: Lang = "en"
+    if args and args[0] in ("en", "ja"):
+        lang = "ja" if args.pop(0) == "ja" else "en"
+    asyncio.run(_main(lang, args[0] if args else "Referees, you may start the matches."))

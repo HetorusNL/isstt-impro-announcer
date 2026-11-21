@@ -70,8 +70,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def piper_tts(tts_cfg: TtsConfig) -> Synth:
-    return Tts(Path(tts_cfg.voice_model), tts_cfg.length_scale, Path(tts_cfg.cache_dir))
+def kokoro_tts(tts_cfg: TtsConfig) -> Synth:
+    return Tts(tts_cfg)
 
 
 def store_path(cfg: Config, args: argparse.Namespace, sim: bool) -> Path:
@@ -139,7 +139,7 @@ def build_runtime(args: argparse.Namespace) -> Runtime:
         player=player,
         source=build_source(args, cfg),
         store_path=store_path(cfg, args, sim),
-        tts_factory=piper_tts,
+        tts_factory=kokoro_tts,
         sim=sim,
         fresh_sim_state=sim and args.state_dir is None,
     )

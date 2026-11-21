@@ -1,6 +1,6 @@
 # ISSTT IMPRO announcer
 
-Presses buttons on the PA paging desk with servos and plays Piper TTS into its mic, at the times on the Cupkit schedule. Design: [`docs/superpowers/specs/2026-11-01-impro-announcer-design.md`](docs/superpowers/specs/2026-11-01-impro-announcer-design.md).
+Presses buttons on the PA paging desk with servos and plays Kokoro TTS (Japanese and English) into its mic, at the times on the Cupkit schedule. Design: [`docs/superpowers/specs/2026-11-01-impro-announcer-design.md`](docs/superpowers/specs/2026-11-01-impro-announcer-design.md).
 
 ## First run
 
@@ -9,7 +9,9 @@ Needs [uv](https://docs.astral.sh/uv/), PortAudio for playback, and for the firm
 ```sh
 uv sync
 cp config.example.toml config.toml
-uv run python -m piper.download_voices en_US-lessac-medium --data-dir voices
+mkdir -p voices
+curl -L -o voices/kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+curl -L -o voices/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
 ```
 
 `config.toml`, `voices/`, `cache/` and `state/` are not in git. There are no secrets: the schedule comes from the public Cupkit page.
