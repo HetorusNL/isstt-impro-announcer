@@ -108,6 +108,7 @@ Then:
 - [ ] Click **Save**, then **Test full sequence** ("This is a test announcement."). PASS: the halls tap, SPREKEN is held through the chime and the speech, then released.
 - [ ] Walk to a hall. PASS: the test is audible and clear. If not, change **volume** or the speaker distance, **Save** and test again. Both speaker channels play mono speech, which is expected.
 - [ ] Listen for hum from the speaker. PASS: none.
+- [ ] Click **Test Japanese**. PASS: the Japanese phrase, a short pause, then the English, all in one SPREKEN hold, and both clear in a hall. If the speed or pause sounds wrong, change **Japanese speed**, **English speed** or the pause on the Settings page, **Save** and test again.
 - [ ] Preview buttons on the Settings page are refused during a session and for 30 s before one, because they share the audio device. They still play on the same speaker; that is harmless, because the mic is live only while Spreken is held.
 - [ ] **Hall lights after the test.** Look at them.
   - All off by themselves: leave **deselect zones after** unticked. PASS.
