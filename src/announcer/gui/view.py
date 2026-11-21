@@ -64,6 +64,17 @@ def fmt_session_times(session: Session) -> str:
     return f"{session.start_at:%a %H:%M:%S} (due {due:%H:%M:%S})"
 
 
+def number(value: object, label: str) -> float:
+    """A number field's value; a cleared field raises ValueError naming it."""
+    if value is None or value == "":
+        raise ValueError(f"{label} is empty")
+    return float(value)  # type: ignore[arg-type]
+
+
+def queued_notice(parts: Sequence[Part]) -> str:
+    return "queued: " + " ".join(text for _, text in parts)
+
+
 def queued_label(session: Session) -> str:
     ann = session.announcements[0]
     en, ja = (ann.text or "").strip(), (ann.text_ja or "").strip()

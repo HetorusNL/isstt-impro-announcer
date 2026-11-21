@@ -575,3 +575,15 @@ async def test_talk_hold_failure_toggles_zones_back_without_deselect_option():
         ("tap", "SC1"),
         ("tap", "SC2"),
     ]
+
+
+async def test_session_longer_than_max_hold_is_refused_before_any_press(tmp_path):
+    cfg = make_cfg()  # chime 3 + tail 0.5
+    cfg.controller.max_hold_s = 5
+    clock, ctrl, player = setup(cfg)
+    a = silent_wav(tmp_path, 1.0, "a.wav")
+    b = silent_wav(tmp_path, 1.0, "b.wav")
+    with pytest.raises(ValueError, match="max hold"):
+        await run_session(ctrl, player, clock, cfg, HALLS, [a, 0.5, b])  # 6 s
+    assert ctrl.events == []
+    assert player.played == []

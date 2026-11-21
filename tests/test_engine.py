@@ -1159,6 +1159,28 @@ async def test_nothing_to_say_presses_nothing(tmp_path):
     assert rig.played_parts() == [("en", START_MSG)]
 
 
+async def test_merged_session_records_a_silent_announcement_as_skipped(tmp_path):
+    from announcer.engine import NOTHING_TO_SAY
+
+    cfg = make_cfg()
+    cfg.messages["match_start"] = ""
+    cfg.messages["match_start_ja"] = ""
+    rig = make_rig(tmp_path, at(8, 59, 50), cfg)
+    rig.write([match(at(9, 0), minutes=5), match(at(9, 5), minutes=60)])  # 09:05 end + start
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: len(engine.history) == 3)
+    finally:
+        await engine.stop()
+    result = {(h.key, h.status, h.detail) for h in engine.history[1:]}
+    assert result == {
+        (key("match_end", at(9, 5)), "played", ""),
+        (key("match_start", at(9, 5)), "skipped", NOTHING_TO_SAY),
+    }
+    assert rig.played_parts() == [("en", END_MSG)]
+
+
 async def test_manual_text_mixed(tmp_path):
     rig = make_rig(tmp_path, at(8, 0))
     engine = rig.engine()

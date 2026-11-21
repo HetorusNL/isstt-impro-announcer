@@ -1,18 +1,30 @@
 from dataclasses import replace
 from pathlib import Path
 
+import asyncio
+import time
+
 import numpy as np
+import pytest
 import soundfile as sf
 
+from announcer.audio import tts as tts_mod
 from announcer.audio.tts import Tts
 from announcer.config import Tts as TtsConfig
 
 
+@pytest.fixture(autouse=True)
+def no_shared_models(monkeypatch):
+    monkeypatch.setattr(tts_mod, "_models", {})
+
+
 class FakeKokoro:
-    def __init__(self) -> None:
+    def __init__(self, delay: float = 0.0) -> None:
         self.calls: list[dict] = []
+        self.delay = delay
 
     def create(self, text, voice, speed=1.0, lang="en-us", is_phonemes=False):
+        time.sleep(self.delay)
         self.calls.append(
             {"text": text, "voice": voice, "speed": speed, "lang": lang, "is_phonemes": is_phonemes}
         )
@@ -135,3 +147,25 @@ async def test_japanese_without_speech_raises_no_speech(tmp_path):
         with pytest.raises(NoSpeech):
             await tts.synth(text, "ja")
     assert tts.loads.kokoro.calls == []
+
+
+async def test_new_tts_with_the_same_model_does_not_reload_it(tmp_path):
+    loads = Loads()
+    base = TtsConfig(cache_dir=str(tmp_path / "cache"))
+    await make(tmp_path, base, loads).synth("one", "en")
+    await make(tmp_path, base, loads).synth("二", "ja")
+    await make(tmp_path, replace(base, english_speed=1.2, pause_seconds=1.0), loads).synth(
+        "three", "en"
+    )
+    assert (loads.kokoro_loads, loads.g2p_loads) == (1, 1)
+    await make(tmp_path, replace(base, model="voices/other.onnx"), loads).synth("four", "en")
+    assert loads.kokoro_loads == 2
+
+
+async def test_two_tts_writing_the_same_file_synthesise_it_once(tmp_path):
+    loads = Loads()
+    loads.kokoro = FakeKokoro(delay=0.1)
+    a, b = make(tmp_path, loads=loads), make(tmp_path, loads=loads)  # engine and preview
+    pa, pb = await asyncio.gather(a.synth("hello", "en"), b.synth("hello", "en"))
+    assert pa == pb and pa.exists()
+    assert len(loads.kokoro.calls) == 1

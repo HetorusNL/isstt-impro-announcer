@@ -15,6 +15,7 @@ FORBIDDEN_NAME_PARTS = ("KOPPEL", "ONTRUIM", "ALARM")  # must never get an actua
 ALLOWED_PLACEHOLDERS = {"time", "count", "fields", "halls"}
 REQUIRED_MESSAGES = ("match_start", "match_end")
 ENGLISH_VOICES = ("af_bella", "jf_alpha")
+JAPANESE_VOICES = ("jf_alpha",)
 JA_SUFFIX = "_ja"  # message key of a fixed Japanese phrase: match_start -> match_start_ja
 MIN_SPEED, MAX_SPEED = 0.5, 2.0  # Kokoro's speed range
 MAX_PAUSE_S = 5.0
@@ -136,11 +137,7 @@ def ja_key(kind: str) -> str:
 
 
 def _check_ja_phrase(name: str, phrase: str) -> None:
-    try:
-        fields_ = [f for _, f, _, _ in string.Formatter().parse(phrase) if f is not None]
-    except ValueError:
-        fields_ = ["?"]
-    if fields_:
+    if "{" in phrase or "}" in phrase:
         raise ConfigError(
             f"message {name!r}: Japanese messages are fixed phrases, without {{ or }}"
         )
@@ -149,6 +146,10 @@ def _check_ja_phrase(name: str, phrase: str) -> None:
 def _check_tts(t: Tts) -> None:
     if t.english_voice not in ENGLISH_VOICES:
         raise ConfigError(f"tts.english_voice {t.english_voice!r} must be one of {ENGLISH_VOICES}")
+    if t.japanese_voice not in JAPANESE_VOICES:
+        raise ConfigError(
+            f"tts.japanese_voice {t.japanese_voice!r} must be one of {JAPANESE_VOICES}"
+        )
     for name in ("english_speed", "japanese_speed"):
         if not MIN_SPEED <= getattr(t, name) <= MAX_SPEED:
             raise ConfigError(f"tts.{name} must be in {MIN_SPEED}..{MAX_SPEED}")

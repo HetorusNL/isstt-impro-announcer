@@ -1,7 +1,8 @@
 """Kokoro TTS for English and Japanese, with an on-disk cache.
 
 The cache key holds the model, voice, language, speed and text, so changing a voice or a
-speed never plays an old file. Japanese text is turned into phonemes with misaki's
+speed never plays an old file. Loaded models are shared by every Tts (the engine's and the
+settings preview's), so a new Tts for changed settings starts at once. Japanese text is turned into phonemes with misaki's
 JAG2P (cutlet + fugashi + unidic-lite): it works offline, unlike misaki's pyopenjtalk
 mode, which downloads a dictionary on first use.
 """
@@ -11,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -18,14 +20,18 @@ from announcer.config import Tts as TtsConfig
 from announcer.speech import Lang, NoSpeech
 
 KOKORO_LANG = {"en": "en-us", "ja": "ja"}
+# Loaded once per process and shared by every Tts: loading Kokoro takes seconds. Keys:
+# ("kokoro", model, voices) and ("g2p",).
+_models: dict[tuple[str, ...], Any] = {}
+# One synthesis at a time across all Tts objects: the engine's and the settings preview's
+# may want the same file at once.
+_synth_lock = threading.Lock()
 
 
 class Tts:
     def __init__(self, cfg: TtsConfig) -> None:
         self.cfg = cfg
         self.cache_dir = Path(cfg.cache_dir)
-        self._kokoro: Any = None
-        self._g2p: Any = None
         self._lock = asyncio.Lock()
 
     def _voice(self, lang: Lang) -> tuple[str, float]:
@@ -48,23 +54,31 @@ class Tts:
 
         return ja.JAG2P()
 
+    def _model(self, key: tuple[str, ...], load: Any) -> Any:
+        if key not in _models:
+            _models[key] = load()
+        return _models[key]
+
     def _synth_to(self, text: str, lang: Lang, path: Path) -> None:
+        with _synth_lock:
+            if not path.exists():  # another Tts may have written it meanwhile
+                self._write(text, lang, path)
+
+    def _write(self, text: str, lang: Lang, path: Path) -> None:
         import soundfile as sf
 
-        if self._kokoro is None:
-            self._kokoro = self._load_kokoro()
+        kokoro = self._model(("kokoro", self.cfg.model, self.cfg.voices), self._load_kokoro)
         voice, speed = self._voice(lang)
         if lang == "ja":
-            if self._g2p is None:
-                self._g2p = self._load_g2p()
-            phonemes, _ = self._g2p(text)
+            g2p = self._model(("g2p",), self._load_g2p)
+            phonemes, _ = g2p(text)
             if not any(ch.isalpha() for ch in phonemes):  # e.g. "★": Kokoro would raise
                 raise NoSpeech(f"nothing speakable in Japanese text {text!r}")
-            samples, rate = self._kokoro.create(
+            samples, rate = kokoro.create(
                 phonemes, voice=voice, speed=speed, lang=KOKORO_LANG[lang], is_phonemes=True
             )
         else:
-            samples, rate = self._kokoro.create(
+            samples, rate = kokoro.create(
                 text, voice=voice, speed=speed, lang=KOKORO_LANG[lang], is_phonemes=False
             )
         path.parent.mkdir(parents=True, exist_ok=True)

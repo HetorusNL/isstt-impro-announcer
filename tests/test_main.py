@@ -758,3 +758,20 @@ async def test_play_preview_order_and_pause(tmp_path, pause) -> None:
     assert [tts.by_path[p] for p in player.played] == [("ja", "a"), ("en", "b")]
     gap = (player.played_at[1] - player.played_at[0]).total_seconds()
     assert gap >= 1.0 + pause
+
+
+@pytest.mark.parametrize("value", [None, ""])
+def test_cleared_number_field_names_the_field(value):
+    from announcer.gui import view
+
+    with pytest.raises(ValueError, match="English speed is empty"):
+        view.number(value, "English speed")
+    assert view.number(1.25, "English speed") == 1.25
+
+
+def test_queued_notice_shows_only_what_is_spoken():
+    from announcer.gui import view
+
+    both = [("ja", "テスト。"), ("en", "Test.")]
+    assert view.queued_notice(both) == "queued: テスト。 Test."
+    assert view.queued_notice([("en", "Test.")]) == "queued: Test."

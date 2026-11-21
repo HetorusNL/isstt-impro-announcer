@@ -469,7 +469,11 @@ class Engine:
             return True
         exc = task.exception()
         if exc is None:
-            self._record(session.announcements, session.halls, "played")
+            silent = task.result()  # merged with others that did play
+            played = [a for a in session.announcements if a not in silent]
+            self._record(played, session.halls, "played")
+            if silent:
+                self._record(silent, session.halls, "skipped", NOTHING_TO_SAY)
         elif isinstance(exc, NothingToSay):
             log.warning("session not played: %s", NOTHING_TO_SAY)
             self._record(session.announcements, session.halls, "skipped", NOTHING_TO_SAY)
@@ -478,8 +482,10 @@ class Engine:
             self._record(session.announcements, session.halls, "failed", str(exc) or repr(exc))
         return True
 
-    async def _desk(self, session: Session) -> None:
+    async def _desk(self, session: Session) -> tuple[Announcement, ...]:
+        """Play the session; returns its announcements that had nothing to say."""
         audio: list[Path | float] = []
+        silent: list[Announcement] = []
         for ann in session.announcements:
             clips: list[Path] = []
             for lang, text in self.parts(ann):
@@ -491,6 +497,8 @@ class Engine:
                         log.warning("left out, nothing speakable: %s %r", lang, text)
                         continue
                 clips.append(path)
+            if not clips:
+                silent.append(ann)
             for i, path in enumerate(clips):
                 if i:  # between the Japanese and the English part, inside the hold
                     audio.append(self.cfg.tts.pause_seconds)
@@ -498,6 +506,7 @@ class Engine:
         if not audio:
             raise NothingToSay(NOTHING_TO_SAY)
         await run_session(self._ctrl, self._player, self._clock, self.cfg, session.halls, audio)
+        return tuple(silent)
 
     def parts(self, ann: Announcement) -> list[Part]:
         """What ann says, in playing order: Japanese, then English (switches applied)."""

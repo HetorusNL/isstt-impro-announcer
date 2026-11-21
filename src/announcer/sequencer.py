@@ -17,6 +17,7 @@ from announcer.controller.base import Controller, ControllerError
 log = logging.getLogger(__name__)
 
 SPREKEN = "SPREKEN"
+HOLD_MARGIN_S = 1.0  # a session must end this long before the firmware's max hold
 PLAY_MARGIN_S = 5.0  # a clip may take this much longer than its duration, then it counts as hung
 T = TypeVar("T")
 
@@ -71,7 +72,14 @@ async def run_session(
     audio: Sequence[Path | float],
 ) -> None:
     """One desk session. audio: WAVs to play, and pauses (seconds of silence) between them,
-    all inside the one SPREKEN hold."""
+    all inside the one SPREKEN hold. Raises ValueError before pressing anything if it
+    would not fit in the max hold (the firmware would release SPREKEN mid-sentence)."""
+    planned = hold_seconds(player, cfg, audio)
+    limit = cfg.controller.max_hold_s
+    if planned + HOLD_MARGIN_S > limit:
+        raise ValueError(
+            f"announcement takes {planned:.1f} s, too long for the max hold of {limit} s"
+        )
     selected: list[str] = []  # halls whose step-1 tap completed
     interruptions = 0
     held = False  # step 2 completed
@@ -115,6 +123,12 @@ async def run_session(
         await _deselect(ctrl, selected, best_effort=interrupted)
     if interrupted:
         raise ControllerError(f"SPREKEN hold was interrupted (last event: {ctrl.last_event})")
+
+
+def hold_seconds(player: Player, cfg: Config, audio: Sequence[Path | float]) -> float:
+    """How long SPREKEN is held for audio: chime, clips and pauses, tail."""
+    body = sum(player.duration(i) if isinstance(i, Path) else i for i in audio)
+    return cfg.announce.chime_seconds + body + cfg.announce.tail_seconds
 
 
 async def _play_bounded(player: Player, path: Path) -> None:

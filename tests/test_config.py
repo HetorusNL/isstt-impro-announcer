@@ -245,7 +245,7 @@ def test_travel_minimum_is_only_for_spreken():
     validate(cfg)
 
 
-@pytest.mark.parametrize("phrase", ["試合{time}", "試合{"])
+@pytest.mark.parametrize("phrase", ["試合{time}", "試合{", "試合{{", "試合}}"])
 def test_ja_message_with_placeholder_rejected(phrase):
     cfg = _valid_config()
     cfg.messages["match_start_ja"] = phrase
@@ -273,6 +273,13 @@ def test_speed_out_of_range_rejected(field, speed):
     cfg = _valid_config()
     setattr(cfg.tts, field, speed)
     with pytest.raises(ConfigError, match=field):
+        validate(cfg)
+
+
+def test_unknown_japanese_voice_rejected():
+    cfg = _valid_config()
+    cfg.tts.japanese_voice = "af_bella"
+    with pytest.raises(ConfigError, match="japanese_voice"):
         validate(cfg)
 
 

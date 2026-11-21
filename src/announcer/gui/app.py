@@ -390,8 +390,8 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 for n, (press, rest) in sliders.items():
                     c.actuators[n].press = int(press.value)
                     c.actuators[n].rest = int(rest.value)
-                c.announce.chime_seconds = float(chime.value)
-                c.announce.tail_seconds = float(tail.value)
+                c.announce.chime_seconds = view.number(chime.value, "chime seconds")
+                c.announce.tail_seconds = view.number(tail.value, "tail seconds")
                 c.audio.volume = float(volume.value)
                 c.announce.deselect_zones_after = bool(deselect.value)
 
@@ -408,6 +408,10 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 ui.notify(f"queued: {view.TEST_PHRASE}")
 
             async def test_japanese() -> None:
+                parts = spoken_parts(engine.cfg.tts, view.TEST_PHRASE, view.TEST_PHRASE_JA)
+                if not parts:
+                    ui.notify("nothing to say: both languages are off (Settings)", type="warning")
+                    return
                 try:
                     await engine.manual_text(
                         engine.cfg.announce.halls, view.TEST_PHRASE, view.TEST_PHRASE_JA
@@ -415,7 +419,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 except RuntimeError as e:
                     ui.notify(str(e), type="negative")
                     return
-                ui.notify(f"queued: {view.TEST_PHRASE_JA} {view.TEST_PHRASE}")
+                ui.notify(view.queued_notice(parts))
 
             with ui.row():
                 ui.button("Save", on_click=save)
@@ -437,17 +441,16 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
             "Japanese phrases are fixed, spoken first; leave empty for none."
         ).classes("text-sm")
         texts = {}
-        preview_tts: list = [None, None]  # (settings, Tts): the model loads once per settings
 
         def edited_tts() -> TtsConfig:
             return dataclasses.replace(
                 engine.cfg.tts,
                 english=bool(english.value),
                 english_voice=str(english_voice.value),
-                english_speed=float(english_speed.value),
+                english_speed=view.number(english_speed.value, "English speed"),
                 japanese=bool(japanese.value),
-                japanese_speed=float(japanese_speed.value),
-                pause_seconds=float(pause.value),
+                japanese_speed=view.number(japanese_speed.value, "Japanese speed"),
+                pause_seconds=view.number(pause.value, "pause"),
             )
 
         async def preview(key: str) -> None:
@@ -462,9 +465,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 if not parts:
                     ui.notify("nothing to say: both languages off or empty", type="warning")
                     return
-                if preview_tts[0] != tts_cfg:
-                    preview_tts[:] = [tts_cfg, rt.tts_factory(tts_cfg)]
-                tts = preview_tts[1]
+                tts = rt.tts_factory(tts_cfg)  # cheap: the loaded model is shared
                 for lang, text in parts:  # synthesise first: that takes a while
                     await tts.synth(text, lang)
                 refusal = view.preview_refusal(engine, rt.clock.now())
@@ -522,9 +523,11 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 c.messages[key] = box.value or ""
             c.tts = edited_tts()
             c.announce.halls = halls()
-            c.schedule.poll_seconds = int(poll.value)
-            c.schedule.round_minutes = {name: int(box.value) for name, box in rounds.items()}
-            c.schedule.default_match_minutes = int(default_minutes.value)
+            c.schedule.poll_seconds = int(view.number(poll.value, "poll interval"))
+            c.schedule.round_minutes = {
+                name: int(view.number(box.value, name)) for name, box in rounds.items()
+            }
+            c.schedule.default_match_minutes = int(view.number(default_minutes.value, "other rounds"))
 
         async def save() -> None:
             error = await view.apply_config(engine, rt.cfg_path, edit, rt.player, rt.cfg_guard)

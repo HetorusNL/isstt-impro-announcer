@@ -16,7 +16,7 @@ curl -L -o voices/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/re
 
 `config.toml`, `voices/`, `cache/` and `state/` are not in git. There are no secrets: the schedule comes from the public Cupkit page.
 
-Speech is Kokoro, offline: Japanese first (voice `jf_alpha`), a short pause, then English (`af_bella` or `jf_alpha`). In `config.toml`, `[messages]` has fixed Japanese phrases `match_start_ja` and `match_end_ja` (no placeholders; empty means no Japanese), and `[tts]` has the switches `english` and `japanese`, `english_voice`, a speed per language (0.5 to 2.0) and `pause_seconds`. All of these can also be set on the Settings page. A `config.toml` from before Kokoro (with `voice_model`) does not load: copy `config.example.toml` again.
+Speech is Kokoro, offline: Japanese first (voice `jf_alpha`), a short pause, then English (`af_bella` or `jf_alpha`). In `config.toml`, `[messages]` has fixed Japanese phrases `match_start_ja` and `match_end_ja` (no placeholders; empty means no Japanese), and `[tts]` has the switches `english` and `japanese`, `english_voice`, a speed per language (0.5 to 2.0) and `pause_seconds`. All of these can also be set on the Settings page. A `config.toml` from before Kokoro (with `voice_model`) does not load: copy `config.example.toml` again. An announcement that would not fit in `controller.max_hold_s` (chime, speech, pauses and tail, plus 1 s) presses nothing and is recorded as failed.
 
 Try it without hardware, with a mock servo controller:
 
