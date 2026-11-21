@@ -5,23 +5,25 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
 from announcer import config
-from announcer.audio.player import SoundPlayer
+from announcer.audio.player import Player, SoundPlayer
 from announcer.config import MIN_SPREKEN_TRAVEL_DEG, Config, ConfigError, ConfigGuard
 from announcer.engine import HistoryEntry, Key
 from announcer.model import Session
 from announcer.sequencer import SPREKEN, _uninterruptible
+from announcer.speech import Lang, Part
 
 log = logging.getLogger(__name__)
 
 REPLAYABLE = ("skipped", "missed", "failed")
 TEST_PHRASE = "This is a test announcement."
+TEST_PHRASE_JA = "これはテストのアナウンスです。"
 KIND_LABELS = {"match_start": "start", "match_end": "end", "manual_text": "manual"}
 PREVIEW_GUARD_S = 30.0  # no preview this close before a session: it would share the audio device
 QUEUED_TEXT_SHOWN = 60
@@ -63,7 +65,9 @@ def fmt_session_times(session: Session) -> str:
 
 
 def queued_label(session: Session) -> str:
-    text = session.announcements[0].text or ""
+    ann = session.announcements[0]
+    en, ja = (ann.text or "").strip(), (ann.text_ja or "").strip()
+    text = " ".join(t for t in (f"「{ja}」" if ja else "", en) if t)
     shown = text if len(text) <= QUEUED_TEXT_SHOWN else text[: QUEUED_TEXT_SHOWN - 3] + "..."
     return f"queued: {shown} ({', '.join(session.halls)})"
 
@@ -393,3 +397,22 @@ class Calibrator:
                 self.away.pop(name, None)
             else:
                 self.away[name] = angle
+
+
+class _PartSynth(Protocol):
+    async def synth(self, text: str, lang: Lang) -> Path: ...
+
+
+async def play_preview(
+    tts: _PartSynth,
+    player: Player,
+    parts: Sequence[Part],
+    pause: float,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> None:
+    """Play parts on player (the laptop speakers), with the pause between them."""
+    for i, (lang, text) in enumerate(parts):
+        path = await tts.synth(text, lang)
+        if i:
+            await sleep(pause)
+        await player.play(path)

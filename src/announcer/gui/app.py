@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections.abc import Awaitable, Callable
 from functools import partial
@@ -10,12 +11,23 @@ from typing import TYPE_CHECKING
 from nicegui import app, ui
 
 from announcer.audio.player import SoundPlayer
-from announcer.config import SAMPLE_RENDER, Config
+from announcer.config import (
+    ENGLISH_VOICES,
+    JA_SUFFIX,
+    MAX_PAUSE_S,
+    MAX_SPEED,
+    MIN_SPEED,
+    SAMPLE_RENDER,
+    Config,
+    ja_key,
+)
+from announcer.config import Tts as TtsConfig
 from announcer.controller.base import ControllerError
 from announcer.engine import Engine, Key
 from announcer.gui import view
 from announcer.model import Session
 from announcer.sequencer import SPREKEN
+from announcer.speech import spoken_parts
 
 if TYPE_CHECKING:
     from announcer.main import Runtime
@@ -230,14 +242,22 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
         cfg = engine.cfg
         ui.label("Halls").classes("text-xl font-bold")
         halls = _hall_boxes(cfg, cfg.announce.halls)
-        text = ui.textarea("Text to speak").classes("w-full max-w-2xl")
+        text_ja = ui.textarea("Japanese text (spoken first)").classes("w-full max-w-2xl")
+        text = ui.textarea("English text").classes("w-full max-w-2xl")
 
         async def speak() -> None:
-            if not halls() or not (text.value or "").strip():
+            en, ja = (text.value or "").strip(), (text_ja.value or "").strip()
+            if not halls() or not (en or ja):
                 ui.notify("select halls and type a text", type="warning")
                 return
+            if not spoken_parts(engine.cfg.tts, en, ja):
+                ui.notify(
+                    "nothing to say: the typed language is switched off (Settings)",
+                    type="warning",
+                )
+                return
             try:
-                await engine.manual_text(halls(), text.value.strip())
+                await engine.manual_text(halls(), en, ja)
             except RuntimeError as e:
                 ui.notify(str(e), type="negative")
                 return
@@ -387,9 +407,20 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                     return
                 ui.notify(f"queued: {view.TEST_PHRASE}")
 
+            async def test_japanese() -> None:
+                try:
+                    await engine.manual_text(
+                        engine.cfg.announce.halls, view.TEST_PHRASE, view.TEST_PHRASE_JA
+                    )
+                except RuntimeError as e:
+                    ui.notify(str(e), type="negative")
+                    return
+                ui.notify(f"queued: {view.TEST_PHRASE_JA} {view.TEST_PHRASE}")
+
             with ui.row():
                 ui.button("Save", on_click=save)
                 ui.button("Test full sequence", on_click=test_sequence)
+                ui.button("Test Japanese", on_click=test_japanese)
             ui.label(
                 "Test full sequence uses the SAVED settings (press Save first) and the "
                 "configured halls. It goes through the desk queue: it waits for a running "
@@ -401,8 +432,23 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
         _header(rt)
         cfg = engine.cfg
         ui.label("Messages").classes("text-xl font-bold")
-        ui.label("Placeholders: {time} {count} {fields} {halls}").classes("text-sm")
+        ui.label(
+            "Placeholders in English: {time} {count} {fields} {halls}. "
+            "Japanese phrases are fixed, spoken first; leave empty for none."
+        ).classes("text-sm")
         texts = {}
+        preview_tts: list = [None, None]  # (settings, Tts): the model loads once per settings
+
+        def edited_tts() -> TtsConfig:
+            return dataclasses.replace(
+                engine.cfg.tts,
+                english=bool(english.value),
+                english_voice=str(english_voice.value),
+                english_speed=float(english_speed.value),
+                japanese=bool(japanese.value),
+                japanese_speed=float(japanese_speed.value),
+                pause_seconds=float(pause.value),
+            )
 
         async def preview(key: str) -> None:
             refusal = view.preview_refusal(engine, rt.clock.now())
@@ -410,21 +456,54 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
                 ui.notify(refusal, type="warning")
                 return
             try:
-                text = (texts[key].value or "").format_map(SAMPLE_RENDER)
-                tts = rt.tts_factory(engine.cfg.tts)
-                path = await tts.synth(text)
-                refusal = view.preview_refusal(engine, rt.clock.now())  # synth takes a while
+                tts_cfg = edited_tts()
+                en = (texts[key].value or "").format_map(SAMPLE_RENDER)
+                parts = spoken_parts(tts_cfg, en, texts[ja_key(key)].value or "")
+                if not parts:
+                    ui.notify("nothing to say: both languages off or empty", type="warning")
+                    return
+                if preview_tts[0] != tts_cfg:
+                    preview_tts[:] = [tts_cfg, rt.tts_factory(tts_cfg)]
+                tts = preview_tts[1]
+                for lang, text in parts:  # synthesise first: that takes a while
+                    await tts.synth(text, lang)
+                refusal = view.preview_refusal(engine, rt.clock.now())
                 if refusal is not None:
                     ui.notify(refusal, type="warning")
                     return
-                await SoundPlayer(None, engine.cfg.audio.volume).play(path)  # laptop speakers
+                player = SoundPlayer(None, engine.cfg.audio.volume)  # laptop speakers
+                await view.play_preview(tts, player, parts, tts_cfg.pause_seconds)
             except Exception as e:
                 ui.notify(f"preview failed: {e!r}", type="negative", multi_line=True)
 
         for key, template in cfg.messages.items():
-            with ui.row().classes("w-full items-center"):
-                texts[key] = ui.input(key, value=template).classes("grow max-w-2xl")
-                ui.button("Preview", on_click=partial(preview, key))
+            if key.endswith(JA_SUFFIX):
+                continue
+            with ui.column().classes("w-full max-w-2xl gap-0"):
+                with ui.row().classes("w-full items-center"):
+                    texts[key] = ui.input(key, value=template).classes("grow")
+                    ui.button("Preview", on_click=partial(preview, key))
+                jk = ja_key(key)
+                texts[jk] = ui.input(jk, value=cfg.messages.get(jk, "")).classes("w-full")
+        ui.label("Speech").classes("text-xl font-bold")
+        t = cfg.tts
+        with ui.row().classes("items-center gap-6"):
+            japanese = ui.switch("Speak Japanese", value=t.japanese)
+            english = ui.switch("Speak English", value=t.english)
+            english_voice = ui.select(
+                list(ENGLISH_VOICES), value=t.english_voice, label="English voice"
+            )
+        with ui.row().classes("items-center gap-6"):
+            speed = {"min": MIN_SPEED, "max": MAX_SPEED, "step": 0.05}
+            japanese_speed = ui.number("Japanese speed", value=t.japanese_speed, **speed)
+            english_speed = ui.number("English speed", value=t.english_speed, **speed)
+            pause = ui.number(
+                "Pause between Japanese and English (s)",
+                value=t.pause_seconds,
+                min=0,
+                max=MAX_PAUSE_S,
+                step=0.1,
+            ).classes("w-72")
         ui.label("Halls to announce in").classes("text-xl font-bold")
         halls = _hall_boxes(cfg, cfg.announce.halls)
         poll = ui.number("poll interval (s)", value=cfg.schedule.poll_seconds, min=10, step=10)
@@ -441,6 +520,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
         def edit(c: Config) -> None:
             for key, box in texts.items():
                 c.messages[key] = box.value or ""
+            c.tts = edited_tts()
             c.announce.halls = halls()
             c.schedule.poll_seconds = int(poll.value)
             c.schedule.round_minutes = {name: int(box.value) for name, box in rounds.items()}

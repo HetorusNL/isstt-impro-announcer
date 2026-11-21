@@ -723,3 +723,38 @@ async def test_mock_logs_button_actions_at_info(caplog: pytest.LogCaptureFixture
     assert len(messages) == 2
     assert "hold SPREKEN" in messages[0] and "release SPREKEN" in messages[1]
     assert "2026-12-19" in messages[0]
+
+
+def test_queued_label_shows_both() -> None:
+    ann = Announcement(due=NOW, kind="manual_text", text="Hello.", text_ja="こんにちは。")
+    label = view.queued_label(Session(NOW, (ann,), ("SC1",)))
+    assert "こんにちは。" in label and "Hello." in label
+    assert label.index("こんにちは。") < label.index("Hello.")
+
+
+def test_queued_label_japanese_only() -> None:
+    ann = Announcement(due=NOW, kind="manual_text", text="", text_ja="こんにちは。")
+    assert "こんにちは。" in view.queued_label(Session(NOW, (ann,), ("SC1",)))
+
+
+class _PartsTts:
+    def __init__(self, tmp_path: Path) -> None:
+        self.tmp_path = tmp_path
+        self.by_path: dict[Path, tuple[str, str]] = {}
+
+    async def synth(self, text: str, lang: str) -> Path:
+        path = self.tmp_path / f"{lang}-{len(self.by_path)}.wav"
+        sf.write(path, np.zeros(8000, dtype="int16"), 8000)  # 1 s
+        self.by_path[path] = (lang, text)
+        return path
+
+
+@pytest.mark.parametrize("pause", [0.0, 0.5])
+async def test_play_preview_order_and_pause(tmp_path, pause) -> None:
+    clock = SimClock(NOW, 200.0)
+    player = MockPlayer(clock)
+    tts = _PartsTts(tmp_path)
+    await view.play_preview(tts, player, [("ja", "a"), ("en", "b")], pause, clock.sleep)
+    assert [tts.by_path[p] for p in player.played] == [("ja", "a"), ("en", "b")]
+    gap = (player.played_at[1] - player.played_at[0]).total_seconds()
+    assert gap >= 1.0 + pause
