@@ -28,7 +28,7 @@ from announcer.planner import (
 from announcer.schedule import store
 from announcer.schedule.source import ScheduleSource, SourceError
 from announcer.sequencer import _uninterruptible, run_session, talk_session
-from announcer.speech import Lang, Part, spoken_parts
+from announcer.speech import Lang, NoSpeech, Part, spoken_parts
 
 log = logging.getLogger(__name__)
 
@@ -481,11 +481,20 @@ class Engine:
     async def _desk(self, session: Session) -> None:
         audio: list[Path | float] = []
         for ann in session.announcements:
-            for i, (lang, text) in enumerate(self.parts(ann)):
+            clips: list[Path] = []
+            for lang, text in self.parts(ann):
+                path = self._audio.get((lang, text))
+                if path is None:
+                    try:
+                        path = await self._tts.synth(text, lang)
+                    except NoSpeech:
+                        log.warning("left out, nothing speakable: %s %r", lang, text)
+                        continue
+                clips.append(path)
+            for i, path in enumerate(clips):
                 if i:  # between the Japanese and the English part, inside the hold
                     audio.append(self.cfg.tts.pause_seconds)
-                path = self._audio.get((lang, text))
-                audio.append(path if path is not None else await self._tts.synth(text, lang))
+                audio.append(path)
         if not audio:
             raise NothingToSay(NOTHING_TO_SAY)
         await run_session(self._ctrl, self._player, self._clock, self.cfg, session.halls, audio)
@@ -540,6 +549,8 @@ class Engine:
 
     async def _synth_all(self, parts: list[Part], gen: int) -> None:
         for part in parts:
+            if gen != self._synth_gen:  # config reloaded: the new pre-synthesis takes over
+                return
             lang, text = part
             try:
                 path = await self._tts.synth(text, lang)

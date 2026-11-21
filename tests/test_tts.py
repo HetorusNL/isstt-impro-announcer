@@ -117,3 +117,21 @@ async def test_wav_is_24k_mono(tmp_path):
     info = sf.info(path)
     assert (info.samplerate, info.channels) == (24000, 1)
     assert path.parent == tmp_path / "cache"
+
+
+class PunctG2P:
+    def __call__(self, text):
+        return {"★": "", "。": "."}[text], None
+
+
+async def test_japanese_without_speech_raises_no_speech(tmp_path):
+    import pytest
+
+    from announcer.speech import NoSpeech
+
+    tts = make(tmp_path)
+    tts._load_g2p = lambda: PunctG2P()
+    for text in ("★", "。"):
+        with pytest.raises(NoSpeech):
+            await tts.synth(text, "ja")
+    assert tts.loads.kokoro.calls == []

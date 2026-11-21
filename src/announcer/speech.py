@@ -10,6 +10,10 @@ Lang = Literal["en", "ja"]
 Part = tuple[Lang, str]
 
 
+class NoSpeech(ValueError):
+    """A text with nothing speakable in it (only symbols or punctuation)."""
+
+
 def spoken_parts(tts: TtsConfig, en: str, ja: str) -> list[Part]:
     """Japanese first, then English; a part is left out if switched off or empty."""
     parts: list[Part] = []

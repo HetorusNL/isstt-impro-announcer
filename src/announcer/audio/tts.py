@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from announcer.config import Tts as TtsConfig
-from announcer.speech import Lang
+from announcer.speech import Lang, NoSpeech
 
 KOKORO_LANG = {"en": "en-us", "ja": "ja"}
 
@@ -58,6 +58,8 @@ class Tts:
             if self._g2p is None:
                 self._g2p = self._load_g2p()
             phonemes, _ = self._g2p(text)
+            if not any(ch.isalpha() for ch in phonemes):  # e.g. "★": Kokoro would raise
+                raise NoSpeech(f"nothing speakable in Japanese text {text!r}")
             samples, rate = self._kokoro.create(
                 phonemes, voice=voice, speed=speed, lang=KOKORO_LANG[lang], is_phonemes=True
             )

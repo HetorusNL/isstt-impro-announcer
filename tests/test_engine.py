@@ -1233,3 +1233,68 @@ async def test_reload_with_new_voice_resynthesises(tmp_path):
     assert [c.english_voice for c in built] == ["jf_alpha"]
     assert ("en", START_MSG) in new_tts.parts
     assert rig.player.played[0] in new_tts.part_by_path
+
+
+async def test_japanese_without_speech_plays_english(tmp_path):
+    from announcer.speech import NoSpeech
+
+    class NoSpeechTts(FakeTts):
+        async def synth(self, text, lang="en"):
+            if lang == "ja" and text == "★":
+                raise NoSpeech(text)
+            return await super().synth(text, lang)
+
+    cfg = make_cfg()
+    cfg.messages["match_start_ja"] = "★"
+    rig = make_rig(tmp_path, at(8, 59, 50), cfg)
+    rig.tts = NoSpeechTts(tmp_path / "tts", rig.clock)
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: engine.history != [])
+    finally:
+        await engine.stop()
+    assert engine.history[0].status == "played"
+    assert rig.played_parts() == [("en", START_MSG)]
+
+
+async def test_old_presynth_stops_after_reload(tmp_path):
+    release = asyncio.Event()
+
+    class SlowTts(FakeTts):
+        async def synth(self, text, lang="en"):
+            if not release.is_set():
+                await release.wait()
+            return await super().synth(text, lang)
+
+    rig = make_rig(tmp_path, at(8, 0))
+    rig.tts = SlowTts(tmp_path / "tts", rig.clock)
+    rig.write([match(at(9, 0))])
+    new_tts = FakeTts(tmp_path / "tts2", rig.clock)
+    engine = Engine(
+        rig.cfg,
+        FileSource(rig.schedule_file, TZ),
+        rig.store_path,
+        rig.ctrl,
+        rig.player,
+        rig.tts,
+        rig.clock,
+        tts_factory=lambda c: new_tts,
+    )
+    await engine.start()
+    try:
+        await asyncio.sleep(0.01)  # the startup pre-synthesis waits in its first synth
+        new = make_cfg()
+        new.messages["match_start"] = "New start."
+        new.messages["match_end"] = "New end."
+        new.tts.english_voice = "jf_alpha"
+        await engine.reload_config(new)
+        release.set()
+        await until(lambda: ("en", "New end.") in new_tts.parts)
+        await asyncio.sleep(0.05)
+    finally:
+        await engine.stop()
+    # the old job's remaining texts never reach the new Tts
+    assert ("en", START_MSG) not in new_tts.parts
+    assert ("en", END_MSG) not in new_tts.parts
