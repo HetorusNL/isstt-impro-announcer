@@ -67,6 +67,21 @@ async def test_session_order(tmp_path):
     assert player.played_at[0] - hold_t >= timedelta(seconds=3.0)  # speech after chime
 
 
+async def test_pause_item_sleeps_inside_hold(tmp_path):
+    cfg = make_cfg()
+    clock, ctrl, player = setup(cfg)
+    a = silent_wav(tmp_path, 1.0, "a.wav")
+    b = silent_wav(tmp_path, 1.0, "b.wav")
+    await run_session(ctrl, player, clock, cfg, HALLS, [a, 0.5, b])
+    kinds = [(k, b_) for _, k, b_ in ctrl.events]
+    assert kinds.count(("hold", "SPREKEN")) == 1
+    assert kinds.count(("release", "SPREKEN")) == 1
+    assert player.played == [a, b]
+    hold_t, rel_t = event_time(ctrl, "hold"), event_time(ctrl, "release")
+    assert hold_t < player.played_at[0] < player.played_at[1] < rel_t
+    assert player.played_at[1] - player.played_at[0] >= timedelta(seconds=1.0 + 0.5)
+
+
 async def test_mock_timing_matches_lead_seconds(tmp_path):
     # Task 6 relies on: session start + lead_seconds - chime ~= SPREKEN hold time
     cfg = make_cfg()

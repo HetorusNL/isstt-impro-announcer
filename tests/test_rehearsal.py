@@ -23,6 +23,8 @@ REPO = Path(__file__).resolve().parents[1]
 TZ = "Europe/Amsterdam"
 START_MSG = "Referees, you may start the matches."
 END_MSG = "Referees, you may end the matches."
+JA_START = "審判の皆さん、試合を開始してください。"
+JA_END = "審判の皆さん、試合を終了してください。"
 
 
 def at(day: int, h: int, m: int, s: int = 0) -> datetime:
@@ -34,9 +36,9 @@ class SilentTts:
         self.cache = cache
         self.by_path: dict[Path, str] = {}
 
-    async def synth(self, text: str) -> Path:
+    async def synth(self, text: str, lang: str) -> Path:
         self.cache.mkdir(parents=True, exist_ok=True)
-        path = self.cache / f"{hashlib.sha256(text.encode()).hexdigest()}.wav"
+        path = self.cache / f"{hashlib.sha256(f'{lang}|{text}'.encode()).hexdigest()}.wav"
         if not path.exists():
             sf.write(path, np.zeros(16000, dtype="int16"), 16000)  # 1 s of silence
         self.by_path[path] = text
@@ -88,6 +90,8 @@ async def test_full_day_18_dec_plays_24_sessions(tmp_path: Path) -> None:
     assert statuses == {("match_start", "played"): 12, ("match_end", "played"): 12}
     assert r.played_texts().count(START_MSG) == 12
     assert r.played_texts().count(END_MSG) == 12
+    assert r.played_texts().count(JA_START) == 12  # the example config has Japanese phrases
+    assert r.played_texts().count(JA_END) == 12
     # every session held and released SPREKEN once
     kinds = Counter((k, b) for _, k, b in r.ctrl.events)
     assert kinds[("hold", "SPREKEN")] == kinds[("release", "SPREKEN")] == 24
@@ -100,7 +104,7 @@ async def test_merged_19_dec_1455_end_then_start_in_one_hold(tmp_path: Path) -> 
     keys = [(h.key, h.status) for h in r.engine.history if h.status == "played"]
     due = at(19, 14, 55).isoformat()
     assert keys == [(("match_end", due), "played"), (("match_start", due), "played")]
-    assert r.played_texts() == [END_MSG, START_MSG]
+    assert r.played_texts() == [JA_END, END_MSG, JA_START, START_MSG]
     holds = [t for t, k, b in r.ctrl.events if (k, b) == ("hold", "SPREKEN")]
     releases = [t for t, k, b in r.ctrl.events if (k, b) == ("release", "SPREKEN")]
     assert len(holds) == len(releases) == 1

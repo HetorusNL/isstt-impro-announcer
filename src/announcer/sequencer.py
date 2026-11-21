@@ -68,8 +68,10 @@ async def run_session(
     clock: Clock,
     cfg: Config,
     halls: Sequence[str],
-    audio: Sequence[Path],
+    audio: Sequence[Path | float],
 ) -> None:
+    """One desk session. audio: WAVs to play, and pauses (seconds of silence) between them,
+    all inside the one SPREKEN hold."""
     selected: list[str] = []  # halls whose step-1 tap completed
     interruptions = 0
     held = False  # step 2 completed
@@ -85,8 +87,11 @@ async def run_session(
         await ctrl.hold(SPREKEN)  # 2.
         held = True
         await clock.sleep(cfg.announce.chime_seconds)  # 3.
-        for path in audio:  # 4.
-            await _play_bounded(player, path)
+        for item in audio:  # 4.
+            if isinstance(item, Path):
+                await _play_bounded(player, item)
+            else:
+                await clock.sleep(item)
         await clock.sleep(cfg.announce.tail_seconds)  # 5.
     except asyncio.CancelledError:
         await _release_after_error(ctrl)

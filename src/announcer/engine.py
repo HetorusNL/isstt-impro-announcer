@@ -15,7 +15,7 @@ from typing import Literal, Protocol
 from announcer.audio.player import Player
 from announcer.audio.tts import Tts
 from announcer.clock import Clock
-from announcer.config import Config
+from announcer.config import JA_SUFFIX, Config, ja_key
 from announcer.config import Tts as TtsConfig
 from announcer.controller.base import Controller
 from announcer.model import Announcement, Match, Session
@@ -28,6 +28,7 @@ from announcer.planner import (
 from announcer.schedule import store
 from announcer.schedule.source import ScheduleSource, SourceError
 from announcer.sequencer import _uninterruptible, run_session, talk_session
+from announcer.speech import Lang, Part, spoken_parts
 
 log = logging.getLogger(__name__)
 
@@ -35,10 +36,15 @@ Status = Literal["played", "skipped", "missed", "failed"]
 Key = tuple[str, str]
 TICK_S = 1.0  # longest clock-time sleep of the run loop
 ESTOP_SETTLE_S = 5.0  # how long an emergency stop waits for cancelled desk tasks to finish
+NOTHING_TO_SAY = "nothing to say: English and Japanese are off or empty"
 
 
 class Synth(Protocol):
-    async def synth(self, text: str) -> Path: ...
+    async def synth(self, text: str, lang: Lang) -> Path: ...
+
+
+class NothingToSay(Exception):
+    """A session whose announcements have no spoken part: no button is pressed."""
 
 
 @dataclass(frozen=True)
@@ -114,9 +120,9 @@ class Engine:
         self._stopped = False
         self.current: Session | None = None  # the desk session running now (GUI)
         # TTS synthesised ahead of start_at (spec 5.6: first word on the minute)
-        self._audio: dict[str, Path] = {}
-        self._synth_pending: set[str] = set()
-        self._synth_failed: set[str] = set()  # pre-synth failed: synthesise at start_at
+        self._audio: dict[Part, Path] = {}
+        self._synth_pending: set[Part] = set()
+        self._synth_failed: set[Part] = set()  # pre-synth failed: synthesise at start_at
         self._bg: set[asyncio.Task[None]] = set()  # pre-synth tasks
         self._render_failed: set[Key] = set()  # pre-synth could not render: logged once
         self._synth_gen = 0  # bumped on reload_config: results of older pre-synths are dropped
@@ -238,11 +244,12 @@ class Engine:
                 if not recorded:  # cancelled: still replayable
                     self._replayable.setdefault(key, entry)
 
-    async def manual_text(self, halls: Sequence[str], text: str) -> None:
-        """Queue a spoken text; it waits for running sessions and for resume."""
+    async def manual_text(self, halls: Sequence[str], text: str, text_ja: str = "") -> None:
+        """Queue a spoken text (English, Japanese or both); it waits for running sessions
+        and for resume."""
         self._check_running()
         now = self._clock.now()
-        ann = Announcement(due=now, kind="manual_text", text=text)
+        ann = Announcement(due=now, kind="manual_text", text=text, text_ja=text_ja)
         self._manual.append(Session(now, (ann,), tuple(halls)))
 
     async def talk_start(self, halls: Sequence[str]) -> None:
@@ -463,54 +470,66 @@ class Engine:
         exc = task.exception()
         if exc is None:
             self._record(session.announcements, session.halls, "played")
+        elif isinstance(exc, NothingToSay):
+            log.warning("session not played: %s", NOTHING_TO_SAY)
+            self._record(session.announcements, session.halls, "skipped", NOTHING_TO_SAY)
         else:
             log.error("session failed: %r", exc)
             self._record(session.announcements, session.halls, "failed", str(exc) or repr(exc))
         return True
 
     async def _desk(self, session: Session) -> None:
-        audio = []
+        audio: list[Path | float] = []
         for ann in session.announcements:
-            text = self._text(ann)
-            path = self._audio.get(text)
-            audio.append(path if path is not None else await self._tts.synth(text))
+            for i, (lang, text) in enumerate(self.parts(ann)):
+                if i:  # between the Japanese and the English part, inside the hold
+                    audio.append(self.cfg.tts.pause_seconds)
+                path = self._audio.get((lang, text))
+                audio.append(path if path is not None else await self._tts.synth(text, lang))
+        if not audio:
+            raise NothingToSay(NOTHING_TO_SAY)
         await run_session(self._ctrl, self._player, self._clock, self.cfg, session.halls, audio)
 
-    def _text(self, ann: Announcement) -> str:
+    def parts(self, ann: Announcement) -> list[Part]:
+        """What ann says, in playing order: Japanese, then English (switches applied)."""
         if ann.kind == "manual_text":
-            return ann.text or ""
-        return render_message(self.cfg.messages[ann.kind], ann)
+            en, ja = ann.text or "", ann.text_ja or ""
+        else:
+            en = render_message(self.cfg.messages[ann.kind], ann)
+            ja = self.cfg.messages.get(ja_key(ann.kind), "")
+        return spoken_parts(self.cfg.tts, en, ja)
 
     # TTS ahead of time
 
     def _prewarm(self) -> None:
         """Synthesise the placeholder-free message templates in the background."""
-        plain = [
-            t.format_map({})
-            for t in self.cfg.messages.values()
-            if all(field is None for _, field, _, _ in string.Formatter().parse(t))
-        ]
-        self._spawn_synth(plain)
+        parts: list[Part] = []
+        for name, t in self.cfg.messages.items():
+            if name.endswith(JA_SUFFIX):
+                parts += spoken_parts(self.cfg.tts, "", t)
+            elif all(field is None for _, field, _, _ in string.Formatter().parse(t)):
+                parts += spoken_parts(self.cfg.tts, t.format_map({}), "")
+        self._spawn_synth(parts)
 
     def _presynth_next(self) -> None:
         if not self.upcoming:
             return
-        texts = []
+        parts: list[Part] = []
         for ann in self.upcoming[0].announcements:
             try:
-                texts.append(self._text(ann))
+                parts += self.parts(ann)
             except Exception:
                 # _desk renders again at start_at, raises, and records the session failed
                 if ann.key not in self._render_failed:
                     self._render_failed.add(ann.key)
                     log.exception("cannot render message for %s", ann.key)
-        self._spawn_synth(texts)
+        self._spawn_synth(parts)
 
-    def _spawn_synth(self, texts: Sequence[str]) -> None:
+    def _spawn_synth(self, parts: Sequence[Part]) -> None:
         todo = [
-            t
-            for t in dict.fromkeys(texts)
-            if t not in self._audio and t not in self._synth_pending and t not in self._synth_failed
+            p
+            for p in dict.fromkeys(parts)
+            if p not in self._audio and p not in self._synth_pending and p not in self._synth_failed
         ]
         if not todo or self._stopped:
             return
@@ -519,19 +538,20 @@ class Engine:
         self._bg.add(task)
         task.add_done_callback(self._bg.discard)
 
-    async def _synth_all(self, texts: list[str], gen: int) -> None:
-        for text in texts:
+    async def _synth_all(self, parts: list[Part], gen: int) -> None:
+        for part in parts:
+            lang, text = part
             try:
-                path = await self._tts.synth(text)
+                path = await self._tts.synth(text, lang)
                 if gen == self._synth_gen:
-                    self._audio[text] = path
+                    self._audio[part] = path
             except Exception:
-                log.exception("pre-synthesis failed; will synthesise at start_at: %r", text)
+                log.exception("pre-synthesis failed; will synthesise at start_at: %r", part)
                 if gen == self._synth_gen:
-                    self._synth_failed.add(text)
+                    self._synth_failed.add(part)
             finally:
                 if gen == self._synth_gen:
-                    self._synth_pending.discard(text)
+                    self._synth_pending.discard(part)
 
     async def _talk(
         self, halls: tuple[str, ...], started: asyncio.Future[None], stop: asyncio.Event

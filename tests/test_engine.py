@@ -62,16 +62,21 @@ class FakeTts:
         self.texts: list[str] = []  # every synth call
         self.synth_at: dict[str, datetime] = {}  # first synth (clock time) per text
         self.by_path: dict[Path, str] = {}
+        self.parts: list[tuple[str, str]] = []  # every synth call, with its language
+        self.part_by_path: dict[Path, tuple[str, str]] = {}
         self.fail = False
 
-    async def synth(self, text: str) -> Path:
+    async def synth(self, text: str, lang: str = "en") -> Path:
         if self.fail:
             raise RuntimeError("tts broke")
         self.texts.append(text)
+        self.parts.append((lang, text))
         self.synth_at.setdefault(text, self.clock.now())
         self.cache.mkdir(parents=True, exist_ok=True)
-        path = self.cache / f"{hashlib.sha256(f'{self.seconds}|{text}'.encode()).hexdigest()}.wav"
+        key = f"{self.seconds}|{lang}|{text}"
+        path = self.cache / f"{hashlib.sha256(key.encode()).hexdigest()}.wav"
         self.by_path[path] = text
+        self.part_by_path[path] = (lang, text)
         if not path.exists():
             sr = 16000
             sf.write(path, np.zeros(int(sr * self.seconds), dtype="int16"), sr)
@@ -116,6 +121,10 @@ class Rig:
     def played(self) -> list[str]:
         """Texts actually played, in order."""
         return [self.tts.by_path[p] for p in self.player.played]
+
+    def played_parts(self) -> list[tuple[str, str]]:
+        """(lang, text) actually played, in order."""
+        return [self.tts.part_by_path[p] for p in self.player.played]
 
     def kinds(self) -> list[tuple[str, str]]:
         return [(k, b) for _, k, b in self.ctrl.events]
@@ -1077,3 +1086,150 @@ async def test_round_minutes_saved_from_settings_replan(tmp_path):
         assert engine.upcoming[1].announcements[0].due == at(9, 25)
     finally:
         await engine.stop()
+
+
+JA_START = "試合を開始してください。"
+
+
+async def test_start_plays_japanese_then_english(tmp_path):
+    cfg = make_cfg()
+    cfg.messages["match_start_ja"] = JA_START
+    rig = make_rig(tmp_path, at(8, 59, 50), cfg)
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: engine.history != [])
+    finally:
+        await engine.stop()
+    assert rig.played_parts() == [("ja", JA_START), ("en", START_MSG)]
+    assert rig.kinds().count(("hold", "SPREKEN")) == 1
+    gap = rig.player.played_at[1] - rig.player.played_at[0]
+    assert gap >= timedelta(seconds=1.0 + cfg.tts.pause_seconds)  # FakeTts clips are 1 s
+
+
+async def test_no_japanese_message_plays_english_only(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 50))
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: engine.history != [])
+    finally:
+        await engine.stop()
+    assert rig.played_parts() == [("en", START_MSG)]
+
+
+async def test_japanese_off_plays_english_only(tmp_path):
+    cfg = make_cfg()
+    cfg.messages["match_start_ja"] = JA_START
+    cfg.tts.japanese = False
+    rig = make_rig(tmp_path, at(8, 59, 50), cfg)
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: engine.history != [])
+    finally:
+        await engine.stop()
+    assert rig.played_parts() == [("en", START_MSG)]
+    assert ("ja", JA_START) not in rig.tts.parts
+
+
+async def test_nothing_to_say_presses_nothing(tmp_path):
+    from announcer.engine import NOTHING_TO_SAY
+
+    cfg = make_cfg()
+    cfg.tts.english = False
+    cfg.tts.japanese = False
+    rig = make_rig(tmp_path, at(8, 59, 50), cfg)
+    rig.write([match(at(9, 0), minutes=60), match(at(9, 5), minutes=60)])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: engine.history != [])
+        assert engine.history[0].key == key("match_start", at(9, 0))
+        assert (engine.history[0].status, engine.history[0].detail) == ("skipped", NOTHING_TO_SAY)
+        assert rig.ctrl.events == []
+        engine.cfg.tts.english = True  # the engine keeps going: the next start plays
+        await until(lambda: len(engine.history) == 2)
+    finally:
+        await engine.stop()
+    assert engine.history[1].status == "played"
+    assert rig.played_parts() == [("en", START_MSG)]
+
+
+async def test_manual_text_mixed(tmp_path):
+    rig = make_rig(tmp_path, at(8, 0))
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await engine.manual_text(["SC1"], "Hello.", "こんにちは。")
+        await until(lambda: engine.history != [])
+    finally:
+        await engine.stop()
+    assert rig.played_parts() == [("ja", "こんにちは。"), ("en", "Hello.")]
+    assert rig.kinds().count(("hold", "SPREKEN")) == 1
+
+
+async def test_prewarm_synthesises_japanese_messages(tmp_path):
+    cfg = make_cfg()
+    cfg.messages["match_start_ja"] = JA_START
+    rig = make_rig(tmp_path, at(8, 0), cfg)
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: ("ja", JA_START) in rig.tts.parts and ("en", END_MSG) in rig.tts.parts)
+        assert rig.clock.now() < at(8, 59)
+    finally:
+        await engine.stop()
+
+
+async def test_prewarm_respects_switches(tmp_path):
+    cfg = make_cfg()
+    cfg.messages["match_start_ja"] = JA_START
+    cfg.tts.japanese = False
+    rig = make_rig(tmp_path, at(8, 0), cfg)
+    rig.write([match(at(9, 0))])
+    engine = rig.engine()
+    await engine.start()
+    try:
+        await until(lambda: ("en", END_MSG) in rig.tts.parts)
+        await asyncio.sleep(0.05)
+    finally:
+        await engine.stop()
+    assert [p for p in rig.tts.parts if p[0] == "ja"] == []
+
+
+async def test_reload_with_new_voice_resynthesises(tmp_path):
+    rig = make_rig(tmp_path, at(8, 59, 0))
+    rig.write([match(at(9, 0))])
+    built: list = []
+    new_tts = FakeTts(tmp_path / "tts2", rig.clock)
+
+    def factory(tts_cfg):
+        built.append(tts_cfg)
+        return new_tts
+
+    engine = Engine(
+        rig.cfg,
+        FileSource(rig.schedule_file, TZ),
+        rig.store_path,
+        rig.ctrl,
+        rig.player,
+        rig.tts,
+        rig.clock,
+        tts_factory=factory,
+    )
+    await engine.start()
+    try:
+        new = make_cfg()
+        new.tts.english_voice = "jf_alpha"
+        await engine.reload_config(new)
+        await until(lambda: engine.history != [])
+    finally:
+        await engine.stop()
+    assert [c.english_voice for c in built] == ["jf_alpha"]
+    assert ("en", START_MSG) in new_tts.parts
+    assert rig.player.played[0] in new_tts.part_by_path

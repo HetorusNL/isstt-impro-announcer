@@ -27,6 +27,7 @@ class Announcement:
     kind: Kind
     matches: tuple[Match, ...] = ()
     text: str | None = None
+    text_ja: str | None = None  # manual texts only: the Japanese part
 
     @property
     def key(self) -> tuple[str, str]:
