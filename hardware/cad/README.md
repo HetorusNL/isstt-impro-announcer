@@ -26,6 +26,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | `../replica/test_button_leaf.scad` | Test button leaf spring | 4 + spare | Jade White |
 | `../replica/alarm_cover.scad` | Dummy flip cover | 2 | Red |
 | `frame_assembly.scad` | The whole rig. Not printed: a picture and the safety checks | - | - |
+| `assembly_steps.scad` | Assembly step pictures in `img/`. Not printed. Re-render with `render_assembly_steps.sh` | - | - |
 | `params.scad`, `lib.scad` | All dimensions; shared geometry | - | - |
 
 **Colours when slicing.** The colours are Bambu Lab PLA Basic. Each file is one colour, so slice one plate per colour. For the carriage and the bracket that means two plates each: 3 in Blue and 1 in Pumpkin Orange. Never print a rig part in Red: on the desk, red means the covered alarm buttons, and the only red print is the replica's dummy cover.
@@ -111,9 +112,25 @@ The side pads and tip dots stay in by the press fit. The under-lip pad hangs ups
 
 1. Cut the rail and posts. Put each nut in its slot as you reach the part that needs it.
 2. Join each post's top end to the rail's bottom face with 2 corner brackets, one on each side of the post, with the M4x8 bolts. Tighten the bolts into the post. Leave the bolts into the rail loose, so the posts slide along the rail. The bracket's centring lips sit in the slot, so a loose bracket still slides along the rail.
+
+   ![Step 2: corner brackets, pulled apart. The frame is drawn the right way up; on the table it is easier upside down](img/assembly-corner.png)
+
+   ![The frame after step 2](img/assembly-frame.png)
+
 3. Press the end caps into the rail ends and post bottoms.
-4. Bolt a jaw to each post's inner face with 2 M5x10, key in the slot, then push in the pads. No adhesive. The pad covers the bolt heads, so take it out to adjust the jaw.
+
+   ![Step 3: end caps, pulled off the rail ends and post bottoms](img/assembly-cap.png)
+
+4. Bolt a jaw to each post's inner face with 2 M5x10, key in the slot, lip at the top pointing to the desk, then push in the pads. Its bottom edge sits `post_tail` (5 mm) above the end of the profile; if the post came out longer than `post_len`, add the difference, so the rail stays at its height. No adhesive. The pad covers the bolt heads, so take it out to adjust the jaw.
+
+   ![Step 4: jaw on the left post seen from the desk, with its bolts and side pad pulled out](img/assembly-jaw.png)
+
 5. Tensioner, one per side: drill out the skin in the shoulder hole. Slide a T-nut into the block's pocket. Put a nominal stop collar (2.6 mm, no notch) on an M5x10 under its head, and thread the bolt through the shoulder into the nut. Put the pad's stub in the socket. Bolt the block to the rail's bottom slot with an M5x10, key in the slot, with the screwdriver up through the head slot. Keep it loose for now.
+
+   ![Step 5: tensioner outside the left post, pulled apart: block with its push bolt, green collar and T-nut, the pad at the post, the rail bolt and its nut](img/assembly-tensioner.png)
+
+   ![The frame after step 5, ready for the squeeze](img/assembly-done.png)
+
 6. Set the squeeze, without the modules. See "Setting the squeeze".
 7. Module: trim a stock single horn to `horn_stub` (7.5 mm from the axis). Drop the plunger into the guide from above, with the dot in its tip, **before** the servo: once the servo is in, the plunger no longer fits past it. Fit the servo from the back with the ears on the back face and the servo's own screws. Fit the horn and the cam with an M2.5x10 screw, its head on the cam's front face. The stock screw is too short with a cam (tested 2026-11-17). A screw goes about 4.5 mm into the shaft before it bottoms, so the cam is 6.6 mm thick and its 4 mm floor leaves 4 mm of thread in the shaft. If the screw bottoms before the head clamps the cam, put an M2.5 washer under the head. The screw only holds the cam on: the arm in its pocket carries the turning force.
 8. Carriage on rail: M5x10 into a T-nut, key in the slot. Bracket on carriage: M5x10 through the slot into a T-nut in the pocket. The slot also gives a screwdriver access to the rail bolt, so a module can slide along the rail without taking it apart.
