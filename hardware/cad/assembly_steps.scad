@@ -4,59 +4,35 @@
 // or all of them with render_assembly_steps.sh.
 include <params.scad>
 include <lib.scad>
+include <hardware.scad>
 
 view = "frame";   // frame, corner, cap, jaw, tensioner, done
 
 c_alu = "Silver";
-c_bracket = "DarkGray";
 c_black = "#202020";
-c_pad = "#E8E0C8";      // EVA foam
-c_steel = "#707070";    // bolts
-c_nut = "#B08D57";      // T-nuts, so they stand out
+c_pad = c_eva;          // EVA foam
 c_collar = "#00AE42";
 
-// ---- simplified hardware ------------------------------------------------------
-// bolt along +Z from its head's underside at the origin, head below
-module bolt(len, d, head_d, head_h) {
-    color(c_steel) {
-        translate([0, 0, -head_h]) cylinder(d = head_d, h = head_h);
-        cylinder(d = d, h = len);
-    }
-}
-module m5(len = bolt_long) bolt(len, 5, m5_head_d - 0.6, m5_head_h - 0.3);
-module m4(len = 8) bolt(len, 4, 7, 2.2);
-// drop-in nut, bolt axis along Z, long side along Y, centred on the origin. Locked in a slot,
-// its long side lies across the slot
-module nut(t = tnut_t - 0.4, l = tnut_len, n = tnut_n - 0.4) {
-    color(c_nut) difference() {
-        translate([-n / 2, -l / 2, 0]) cube([n, l, t]);
-        translate([0, 0, -1]) cylinder(d = 4.5, h = t + 2);
-    }
-}
+// ---- hardware, from hardware.scad ---------------------------------------------
+module m5(len = bolt_long) m5_bolt(len);
+module m4() m4_bolt();
+module nut() m5_nut();
 
 // ---- frame parts ----------------------------------------------------------------
 module rail() color(c_alu) translate([rail_x0, rail_y, rail_zc]) rotate([0, 90, 0]) ext2020(rail_len);
 module post(x, drop = 0) color(c_alu) translate([x, rail_y, post_z0 - drop]) ext2020(post_len);
 
-// corner bracket: a leg on the rail's underside and a leg on the post face at x = face,
-// reaching away from the post in direction s
+// corner bracket on the post face at x = face, reaching away from the post in direction s
 module bracket(face, s, e = 0) {
-    w = ext - 2;
-    t = bracket_t;
-    color(c_bracket) translate([face + s * e, rail_y, rail_z0 - e]) mirror([s < 0 ? 1 : 0, 0, 0]) {
-        box(0, bracket_leg, -w / 2, w / 2, -t, 0);
-        box(0, t, -w / 2, w / 2, -bracket_leg, 0);
-        for (y = [-w / 2, w / 2 - 2]) translate([0, y, 0]) rotate([90, 0, 0]) translate([0, 0, -2])
-            linear_extrude(2) polygon([[0, 0], [bracket_leg * 0.8, 0], [0, -bracket_leg * 0.8]]);
-    }
+    translate([face + s * e, rail_y, rail_z0 - e]) mirror([s < 0 ? 1 : 0, 0, 0]) corner_bracket();
     // bolts and nuts: into the rail from below, into the post from the side. Exploded,
     // the nut sits in the gap between the profile and the bracket.
-    bx = face + s * (bracket_leg / 2 + 2 + e);
+    bx = face + s * (corner_hole + e);
     translate([bx, rail_y, rail_z0 - bracket_t - e - (e > 0 ? 3 : 0)]) m4();
-    translate([bx, rail_y, e > 0 ? rail_z0 - e / 2 - 1.8 : rail_z0 + slot_lip]) nut(3.6, 11.4, 5.4);
-    bz = rail_z0 - bracket_leg / 2 - 2 - e;
+    translate([bx, rail_y, e > 0 ? rail_z0 - e / 2 - 2 : rail_z0 + slot_lip]) m4_nut();
+    bz = rail_z0 - corner_hole - e;
     translate([face + s * (bracket_t + e + (e > 0 ? 3 : 0)), rail_y, bz]) rotate([0, s > 0 ? -90 : 90, 0]) m4();
-    translate([e > 0 ? face + s * (e / 2 + 1.8) : face - s * slot_lip, rail_y, bz]) rotate([0, s > 0 ? -90 : 90, 0]) nut(3.6, 11.4, 5.4);
+    translate([e > 0 ? face + s * (e / 2 + 2) : face - s * slot_lip, rail_y, bz]) rotate([0, s > 0 ? -90 : 90, 0]) m4_nut();
 }
 
 module corner(x, e = 0) {

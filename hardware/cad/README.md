@@ -25,7 +25,10 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | `../replica/test_button_plunger.scad` | Test button cap and snap stem | 4 | Jade White |
 | `../replica/test_button_leaf.scad` | Test button leaf spring | 4 + spare | Jade White |
 | `../replica/alarm_cover.scad` | Dummy flip cover | 2 | Red |
+| `rig.3mf` | Bambu Studio project with every printed part on 9 plates, colours and settings set, ready to print | 9 plates | as above |
 | `frame_assembly.scad` | The whole rig. Not printed: a picture and the safety checks | - | - |
+| `hardware.scad` | Bought parts and EVA pads for the pictures: bolts, drop-in nuts, corner brackets, servo and horn screws, clamp pads, plunger dots. Not printed | - | - |
+| `speaker_assembly.scad` | The speaker in its cradle on the mic's gooseneck, with the clamp cap, lining, bolts and nuts. Not printed: a picture, separate from the rig | - | - |
 | `assembly_steps.scad` | Assembly step pictures in `img/`. Not printed. Re-render with `render_assembly_steps.sh` | - | - |
 | `params.scad`, `lib.scad` | All dimensions; shared geometry | - | - |
 
@@ -43,13 +46,13 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | Jade White (10100) | Replica test button caps and leaf springs |
 | Red (10200) | Replica dummy covers only |
 
-`frame_assembly.scad` draws the rig in these colours:
+`frame_assembly.scad` draws the rig in these colours. `render_colours.sh` renders these pictures and the speaker ones below; keep its camera settings, so new renders match:
 
 ![The rig in its print colours, from the front](img/rig-colours-front.png)
 
 ![The rig in its print colours, from the back](img/rig-colours-back.png)
 
-The grey translucent blocks are the keep-out volumes over the covered buttons, not parts.
+The grey translucent blocks are the keep-out volumes over the covered buttons, not parts. The model also draws the bought parts from `hardware.scad`: every bolt and drop-in nut (in tan, so they stand out), the corner brackets, the EVA pads and plunger dots, and the servo and horn screws. The tensioners are drawn clamped, with the push bolt seated on its collar. The corner bracket's width, bolt hole position, lips and window are estimates (`corner_*` in `params.scad`): they only change the pictures.
 
 ## Print settings (Bambu Lab H2D)
 
@@ -245,6 +248,12 @@ The nearest part is the SC 3 module, directly in front of the alarm. Its guide e
 If a measured `pitch_y` or `alarm_xy` trips the assert, the clearance is `pitch_y - cover_d / 2 + cover_off_y - sleeve_half`. Measure `cover_d` first, then reduce `guide_wall` (down to about 1.6 mm) for a narrower nose. Don't just lower `lip_clearance_min`.
 
 ## Speaker holder
+
+`speaker_assembly.scad` draws the speaker in its cradle on the mic, 40 mm from the mic head to the mesh:
+
+![The speaker on the mic, from the cradle side](img/speaker-front.png)
+
+![The speaker on the mic, from the clamp cap side](img/speaker-back.png)
 
 The ER-151 is a rounded equilateral triangle: two rubber end parts, 25 mm long and 61 mm across a face with about 11.25 mm corner radius, and a mesh section between them, 54.5 mm across a face. The shape comes from the [EARSON ER-151 Bike Holder](https://www.thingiverse.com/thing:2039735) by lufton (CC BY); the sizes are measured. The cups hold the rubber ends, and `mic_dist` is measured from the mesh, which sits 1.9 mm behind the ends' face. It slides into the cradle from the open side and snaps in. Under the open corner of each cup, a tab continues the floor inward with a small hook. The prism's corner rides over the hook, the tab bends away, and the hook closes behind the corner. To take the speaker out, pull it straight back out of the open side, or press the tabs down with a thumb. The first test, with 0.8 mm clearance per side and three hook heights, was loose on all three: the play, not the hook, decided the fit. The hook now sits as close to the corner as the corner's rounding allows. A second test, `speaker_snap_test.scad`, prints three cradle ends at 0.2, 0.4 and 0.6 mm clearance per side. 0.2 mm fits without rattling, with the 2.2 mm hook of the 0.6 mm piece: `spk_clear` is 0.2 and `spk_snap` 1.8. The tab then bends 1.8 mm, about 1.5 % strain, well below where PLA yields.
 

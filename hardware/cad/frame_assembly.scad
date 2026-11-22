@@ -3,6 +3,7 @@
 // keep-out volumes. Keep-outs are drawn as translucent % volumes.
 include <params.scad>
 include <lib.scad>
+include <hardware.scad>
 
 // ---- Safety ------------------------------------------------------------------
 for (c = covered_buttons) {
@@ -61,19 +62,29 @@ module frame() {
         translate([rail_x0, rail_y, rail_zc]) rotate([0, 90, 0]) ext2020(rail_len);
         for (x = [post_x_l, post_x_r]) translate([x, rail_y, post_z0]) ext2020(post_len);
     }
-    // corner brackets, both sides of each post
-    color("DarkGray") for (x = [post_x_l, post_x_r], s = [-1, 1])
-        translate([x + s * (ext / 2 + bracket_leg / 2), rail_y, rail_z0 - bracket_leg / 2])
-            cube([bracket_leg, ext, bracket_leg], center = true);
+    // corner brackets, both sides of each post, with their bolts and nuts
+    for (x = [post_x_l, post_x_r], s = [-1, 1])
+        translate([x + s * ext / 2, rail_y, rail_z0]) mirror([s < 0 ? 1 : 0, 0, 0]) corner_joint();
+    // end caps: rail ends and post bottoms, tongues into the profile
     color(c_structure) {
-        translate([post_x_l + ext / 2, rail_y, 0]) edge_clamp();
-        translate([post_x_r - ext / 2, rail_y, 0]) rotate(180) edge_clamp();
+        translate([rail_x0 - 2, rail_y, rail_zc]) rotate([0, 90, 0]) end_cap();
+        translate([rail_x0 + rail_len + 2, rail_y, rail_zc]) rotate([0, -90, 0]) end_cap();
+        for (x = [post_x_l, post_x_r]) translate([x, rail_y, post_z0 - 2]) end_cap();
     }
+    for (a = [[post_x_l + ext / 2, 0], [post_x_r - ext / 2, 180]])
+        translate([a[0], rail_y, 0]) rotate(a[1]) {
+            color(c_structure) edge_clamp();
+            edge_clamp_parts();
+        }
+    // tensioners, clamped: the push bolt is seated on its collar, so the block stands
+    // pad_squeeze further out than where its pad first touched the post
     for (a = [[post_x_l - ext / 2, 180], [post_x_r + ext / 2, 0]])
         translate([a[0], rail_y, 0]) rotate(a[1]) {
-            color(c_structure) tensioner_block();
             color(c_structure) translate([0, 0, ten_z]) tensioner_pad();
-            color(c_collar) translate([ten_head_x, 0, ten_z]) rotate([0, 90, 0]) tensioner_collar();
+            translate([pad_squeeze, 0, 0]) {
+                color(c_structure) tensioner_block();
+                tensioner_parts();
+            }
         }
 }
 
@@ -84,6 +95,8 @@ module servo_module(body = c_module) {
     // cam drawn at press: eccentric past horizontal, button bottomed out
     color(c_moving) translate([0, cam_back_y, z_shaft]) rotate([-90, 0, 0]) rotate(90 - cam_press_angle) servo_cam();
     color(c_moving) translate([0, mod_d, btn_proud - btn_travel]) servo_plunger();
+    translate([0, mod_d, btn_proud - btn_travel]) plunger_dot();
+    servo_module_parts();
 }
 
 desk();
