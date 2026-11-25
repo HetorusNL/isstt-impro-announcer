@@ -85,7 +85,7 @@ Run these with the real rig on the real SPREKEN button. After each one, turn any
 For SC1, SC2, SC3 and SPREKEN, one at a time:
 
 - [ ] **Module height first**, not the slider: with the eccentric pointing up (the cam's clear position), adjust the module height so the plunger rests on the cap with about 1 mm gap to the cam (README assembly step 9). Do not set this at servo angle 90. Then set the **rest** slider so the cam is clear of the plunger. Expect about 45.
-- [ ] Move the **press** slider up from rest to the angle where the button **just bottoms out**. Expect about 95 to 115: on the replica it was SPREKEN 93, SC1 99, SC2 101, SC3 113. Do not go further: overdriving draws current and lifts the frame. PASS: the button clicks or bottoms and the frame does not lift. Eccentrics all point the same side.
+- [ ] Move the **press** slider up from rest to the angle where the button **just bottoms out**. Expect about 120 to 150: on the replica it was SPREKEN 146, SC1 137, SC2 138, SC3 123. Touching the cap is not enough: the cap must land, checked with a paper strip under it. Do not go further: overdriving draws current and lifts the frame. PASS: the button clicks or bottoms and the frame does not lift. Eccentrics all point the same side.
 - [ ] Click **Test tap**. PASS: the button is pressed once and the servo comes back to rest.
 
 Then:
