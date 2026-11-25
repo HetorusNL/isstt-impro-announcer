@@ -2,6 +2,8 @@
 
 Power goes one way: the 5 V 4 A adapter feeds a servo rail on perfboard, and the rail feeds the servos and the Nucleo. The speaker has nothing to do with this rail.
 
+**Wire with the power off**: adapter unplugged, laptop USB out. Before the first power-up, do the [pre-power checklist](#pre-power-checklist) with the servos unplugged. Plug in or unplug servo leads only with the power off.
+
 ## Diagram
 
 ```
@@ -69,13 +71,13 @@ Channel n is pin An. A0 to A5 are on the Arduino header, A6 and A7 on the Zio co
 
 ## Servo leads
 
-Servos connect to the rail through the 30 cm extension leads.
+Servos connect to the rail through the 30 cm extension leads. Their wires have other colours than the servo's: at each servo connector, orange meets white and brown meets black.
 
-| Wire colour | Function | Header pin |
-|---|---|---|
-| Brown | GND | GND |
-| Red | +5 V | +5 V |
-| Orange | Signal | signal |
+| Servo wire | Extension lead wire | Function | Header pin |
+|---|---|---|---|
+| Brown | Black | GND | GND |
+| Red | Red | +5 V | +5 V |
+| Orange | White | Signal | signal (Ax) |
 
 **Routing rule: never run a lead across or above the two covered buttons** (*Ontruimingsalarm*, *Koppel ruimtes*). The hand volume above them stays free. Run leads along the rail and away from the covers, and fix them so they cannot sag into that volume.
 
@@ -85,9 +87,9 @@ There is no USB sound card. The Earson ER-151 takes audio from the laptop's 3.5 
 
 ## Pre-power checklist
 
-Do this with the servos unplugged, then again with them plugged in.
+Do this with the power off and the servos unplugged, before the first power-up. Then, with the power off, plug in the servos, power up, and do the last two checks.
 
-- [ ] **Polarity:** `+5 V` and `GND` on the terminal block match the rail, the capacitor stripe is on `GND`, and brown is on `GND` on every header.
+- [ ] **Polarity:** `+5 V` and `GND` on the terminal block match the rail, the capacitor stripe is on `GND`, and black (the servo's brown) is on `GND` on every header.
 - [ ] **No short:** with the adapter unplugged, the meter shows no short between `+5 V` and `GND`. It will rise slowly while the capacitor charges from the meter.
 - [ ] **JP3 is on E5V**, and `GND` from the rail reaches the Nucleo.
 - [ ] **Adapter voltage under load:** measure at the rail with all four servos moving. It must stay within **4.75 to 5.25 V**.

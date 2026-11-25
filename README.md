@@ -58,7 +58,7 @@ Commands and failsafes: [`firmware/PROTOCOL.md`](firmware/PROTOCOL.md).
 
 ### Last bench step
 
-Before taking the rig to the desk, set the final `rest` (about 135) in `config.toml` and connect once with `uv run announcer`, with the board on the servo rail. The firmware drives the servos to the rest in its flash at power-on, before the host sends any config. So the rest left over from bench tests decides what the servos do at the next power-on, and at the wrong rest a cam can hold a button down. Keep the plungers out until this connect has happened. The F746 spare board keeps rests in RAM only: after a power cycle it drives nothing until the host connects.
+Before taking the rig to the desk, set the final `rest` (45, from the bench calibration) in `config.toml` and connect once with `uv run announcer`, with the board on the servo rail. The firmware drives the servos to the rest in its flash at power-on, before the host sends any config. So the rest left over from bench tests decides what the servos do at the next power-on, and at the wrong rest a cam can hold a button down. Keep the plungers out until this connect has happened. The F746 spare board keeps rests in RAM only: after a power cycle it drives nothing until the host connects.
 
 ## On site
 

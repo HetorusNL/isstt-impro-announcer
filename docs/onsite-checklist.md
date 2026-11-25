@@ -25,7 +25,7 @@ Numbers for the rig (squeeze, gauge, pull force) live in [`hardware/cad/README.m
 
 ### 0.1 Before power-on
 
-- [ ] **Rest and press first.** Open `config.toml` and set, for the four actuators, `rest` to about 135 and `press` to a safe angle close to it, for example 120. The real press angle comes from calibration in section 2. PASS: `rest` is not 90 and `press` is not 60 in `config.toml`. See "Cam calibration" in the CAD README (`hardware/cad/README.md`).
+- [ ] **Rest and press first.** Open `config.toml` and set, for the four actuators, `rest` to 45 and `press` to a safe angle close to it, for example 60. The real press angle comes from calibration in section 2. PASS: `rest` is 45 in `config.toml`, as in `config.example.toml`. See "Cam calibration" in the CAD README (`hardware/cad/README.md`).
 - [ ] **Plungers out** until one connect with the final rest has happened (section 1), unless the last bench step in the [README](../README.md#last-bench-step) was done with this rest. The firmware drives the servos to the rest in its flash at power-on, before the host sends any config, and the cam at rest 90 holds the plunger about 1.5 mm into the button travel. PASS: no plunger in a guide, or the bench step is ticked here: ____
 - [ ] **Speaker power** is the separate USB wall charger, not the laptop and not the servo rail. PASS: speaker on, no hum.
 
@@ -84,8 +84,8 @@ Run these with the real rig on the real SPREKEN button. After each one, turn any
 
 For SC1, SC2, SC3 and SPREKEN, one at a time:
 
-- [ ] **Module height first**, not the slider: with the eccentric pointing up (the cam's clear position), adjust the module height so the plunger rests on the cap with about 1 mm gap to the cam (README assembly step 9). Do not set this at servo angle 90. Then set the **rest** slider so the cam is clear of the plunger. Expect about 135.
-- [ ] Move the **press** slider to the angle where the button **just bottoms out**. Expect about 65. Do not go further: overdriving draws current and lifts the frame. PASS: the button clicks or bottoms and the frame does not lift. Eccentrics all point the same side.
+- [ ] **Module height first**, not the slider: with the eccentric pointing up (the cam's clear position), adjust the module height so the plunger rests on the cap with about 1 mm gap to the cam (README assembly step 9). Do not set this at servo angle 90. Then set the **rest** slider so the cam is clear of the plunger. Expect about 45.
+- [ ] Move the **press** slider up from rest to the angle where the button **just bottoms out**. Expect about 95 to 115: on the replica it was SPREKEN 93, SC1 99, SC2 101, SC3 113. Do not go further: overdriving draws current and lifts the frame. PASS: the button clicks or bottoms and the frame does not lift. Eccentrics all point the same side.
 - [ ] Click **Test tap**. PASS: the button is pressed once and the servo comes back to rest.
 
 Then:
