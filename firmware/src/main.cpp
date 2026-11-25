@@ -29,6 +29,12 @@ static const uint32_t DEFAULT_MAXHOLD_MS = 60000;
 static const uint32_t DEFAULT_WATCHDOG_MS = 2000;
 static const uint32_t MAX_WATCHDOG_MS = 10000;
 static const uint32_t MAX_MAXHOLD_MS = 120000;
+// Status LEDs: blink while loop() runs. Slow without a host, fast while the host sends lines.
+// A stuck loop freezes them, until the IWDG resets the board. D13 is the LED on the Mega
+// prototype shield on top of the board; LD1 (green) is the board's own, under the shield.
+static const uint8_t STATUS_LEDS[] = {D13, LED_BUILTIN};
+static const uint32_t BLINK_IDLE_MS = 500;    // half period, no host: 1 Hz
+static const uint32_t BLINK_HOST_MS = 125;    // half period, host connected: 4 Hz
 
 // Bump PIN_TABLE_VERSION whenever PINS[] changes meaning; it is folded (with
 // NUM_CH) into the stored magic so old rests are never carried over.
@@ -48,6 +54,9 @@ static uint32_t maxHoldMs = DEFAULT_MAXHOLD_MS;
 static uint32_t watchdogMs = DEFAULT_WATCHDOG_MS;
 static uint32_t lastLineMs;
 static bool watchdogFired;
+static bool hostSeen;                 // a line has arrived since boot
+static uint32_t lastBlinkMs;
+static bool ledOn;
 static uint32_t lastTick;
 
 static char lineBuf[MAX_LINE + 1];
@@ -264,6 +273,7 @@ static void pollSerial() {
     if (c == '\n') {
       lastLineMs = millis();  // any line, valid or not, is host activity
       watchdogFired = false;
+      hostSeen = true;
       if (discarding) {
         Serial.println(F("ERR too long"));
         discarding = false;
@@ -297,8 +307,19 @@ static void checkFailsafes() {
   }
 }
 
+// ---- status LED -------------------------------------------------------------
+static void updateLed(uint32_t now) {
+  uint32_t half = (hostSeen && !watchdogFired) ? BLINK_HOST_MS : BLINK_IDLE_MS;
+  if ((uint32_t)(now - lastBlinkMs) >= half) {
+    lastBlinkMs = now;
+    ledOn = !ledOn;
+    for (uint8_t pin : STATUS_LEDS) digitalWrite(pin, ledOn ? HIGH : LOW);
+  }
+}
+
 void setup() {
   bool iwdgReset = IWatchdog.isReset(true);
+  for (uint8_t pin : STATUS_LEDS) pinMode(pin, OUTPUT);
   Serial.begin(BAUD);
   loadRest();
   // Release on boot: only channels with a stored rest are attached/driven.
@@ -316,5 +337,6 @@ void loop() {
   if ((uint32_t)(now - lastTick) >= TICK_MS) {
     lastTick = now;
     checkFailsafes();
+    updateLed(now);
   }
 }

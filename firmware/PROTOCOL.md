@@ -36,6 +36,16 @@ Channels are 0-7, degrees 0-180. Errors: `ERR args`, `ERR channel`, `ERR degrees
 
 A channel with no stored rest is never attached at boot and never driven by any failsafe.
 
+## Status LED
+
+Two LEDs blink together while the firmware's main loop runs: the LED on D13, which is the one on the Mega prototype shield on top of the board, and the board's own green LD1, under the shield. D13 is not a servo channel.
+
+| LED | Meaning |
+|---|---|
+| Slow blink, once a second (1 Hz) | Running, no host: nothing received since boot, or the keep-alive watchdog fired |
+| Fast blink, 4 per second (4 Hz) | Running, the host is connected and sending lines |
+| Steady on or off | Not running: the loop is stuck (the IWDG then resets the board within 0.5 s) or there is no power |
+
 ## Failsafe layers
 
 1. Software keep-alive watchdog (above).
