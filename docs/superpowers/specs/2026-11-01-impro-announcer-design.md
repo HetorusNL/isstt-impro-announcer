@@ -152,9 +152,9 @@ the config file and out of git (env var or separate untracked file).
 - Follow listed times exactly; the schedule is irregular (odd 20-minute gaps,
   one-match slots, long breaks between rounds while the committee prepares
   the next one).
-- *Timing (my call):* start the session early by (zone presses + chime) so
-  the first word is spoken on the scheduled minute. Computed from config,
-  overridable by `lead_seconds`.
+- *Timing (Tim, 2026-11-25):* start the session early by the zone presses and
+  the SPREKEN press, so the desk chime starts on the scheduled minute and the
+  speech follows it. Computed from config, overridable by `lead_seconds`.
 - *Collisions (my call):* announcements due within the same session window
   are merged into one session, end message first, then start, Spreken held
   throughout. Scheduled and manual announcements share one queue; never

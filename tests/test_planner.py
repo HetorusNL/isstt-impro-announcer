@@ -83,7 +83,7 @@ def test_render_plain_and_placeholders():
 
 
 def test_lead_seconds_computed():
-    assert lead_seconds(_cfg()) == 4.75
+    assert lead_seconds(_cfg()) == 1.75  # 3 halls x (250 + 250 ms) + SPREKEN 250 ms
 
 
 def test_lead_seconds_override():

@@ -119,7 +119,7 @@ class Engine:
         self._talk_stop: asyncio.Event | None = None
         self._stopped = False
         self.current: Session | None = None  # the desk session running now (GUI)
-        # TTS synthesised ahead of start_at (spec 5.6: first word on the minute)
+        # TTS synthesised ahead of start_at, so the speech follows the chime without delay
         self._audio: dict[Part, Path] = {}
         self._synth_pending: set[Part] = set()
         self._synth_failed: set[Part] = set()  # pre-synth failed: synthesise at start_at

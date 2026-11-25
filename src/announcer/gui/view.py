@@ -59,7 +59,7 @@ def session_matches(session: Session) -> int:
 
 
 def fmt_session_times(session: Session) -> str:
-    """When the session starts, and when its first word is due."""
+    """When the session starts, and when its chime is due."""
     due = session.announcements[0].due
     return f"{session.start_at:%a %H:%M:%S} (due {due:%H:%M:%S})"
 

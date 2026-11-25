@@ -109,5 +109,5 @@ async def test_merged_19_dec_1455_end_then_start_in_one_hold(tmp_path: Path) -> 
     releases = [t for t, k, b in r.ctrl.events if (k, b) == ("release", "SPREKEN")]
     assert len(holds) == len(releases) == 1
     assert all(holds[0] < t < releases[0] for t in r.player.played_at)
-    # the first word on the minute (spec 5.6), within sim-clock scheduling jitter
-    assert abs((r.player.played_at[0] - at(19, 14, 55)).total_seconds()) < 1
+    # the chime (SPREKEN held) on the minute, within sim-clock scheduling jitter
+    assert abs((holds[0] - at(19, 14, 55)).total_seconds()) < 1

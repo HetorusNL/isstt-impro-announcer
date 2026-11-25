@@ -83,12 +83,12 @@ async def test_pause_item_sleeps_inside_hold(tmp_path):
 
 
 async def test_mock_timing_matches_lead_seconds(tmp_path):
-    # Task 6 relies on: session start + lead_seconds - chime ~= SPREKEN hold time
+    # the engine relies on: session start + lead_seconds ~= SPREKEN hold, the chime's start
     cfg = make_cfg()
     clock, ctrl, player = setup(cfg)
     t0 = clock.now()
     await run_session(ctrl, player, clock, cfg, HALLS, [silent_wav(tmp_path, 0.1)])
-    expected = t0 + timedelta(seconds=lead_seconds(cfg) - cfg.announce.chime_seconds)
+    expected = t0 + timedelta(seconds=lead_seconds(cfg))
     assert abs((event_time(ctrl, "hold") - expected).total_seconds()) <= 1.0
 
 

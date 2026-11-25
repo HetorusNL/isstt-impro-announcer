@@ -181,7 +181,7 @@ async def test_plays_start_and_end_on_time(tmp_path):
     holds = rig.times("hold")
     assert len(holds) == 2
     for hold, due in zip(holds, (at(9, 0), at(9, 1)), strict=True):
-        assert abs((hold - (due - timedelta(seconds=3.0))).total_seconds()) <= 1.0
+        assert abs((hold - due).total_seconds()) <= 1.0  # the chime starts on the due time
     assert rig.played() == [START_MSG, END_MSG]
     assert engine.upcoming == []
 

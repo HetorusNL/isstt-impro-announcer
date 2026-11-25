@@ -61,8 +61,10 @@ def render_message(template: str, ann: Announcement) -> str:
 
 
 def lead_seconds(cfg: Config) -> float:
+    """How long before the due time a session starts: the zone taps and the SPREKEN press,
+    so the desk chime starts on the due time. The speech follows after chime_seconds."""
     if cfg.announce.lead_seconds is not None:
         return cfg.announce.lead_seconds
     acts = cfg.actuators
     halls_ms = sum(acts[h].press_ms + acts[h].release_ms for h in cfg.announce.halls)
-    return halls_ms / 1000 + acts["SPREKEN"].press_ms / 1000 + cfg.announce.chime_seconds
+    return halls_ms / 1000 + acts["SPREKEN"].press_ms / 1000
