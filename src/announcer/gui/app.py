@@ -94,13 +94,34 @@ def _notify_error(message: str | None, ok: str) -> None:
         ui.notify(message, type="negative", multi_line=True, timeout=10000)
 
 
-def _header(rt: Runtime) -> None:
+def _header(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
+    """Top bar on every page: navigation, run state, Pause/Resume and EMERGENCY STOP."""
     with ui.header().classes("items-center"):
         ui.label("IMPRO announcer").classes("text-lg font-bold")
         for path, name in PAGES:
             ui.link(name, path).classes("text-white")
         if rt.sim:
             ui.label("SIMULATION").classes("bg-orange-600 px-2 rounded")
+        ui.space()
+        state = ui.label().classes("text-lg font-bold px-2 rounded")
+        toggle = ui.button(
+            on_click=lambda: engine.resume() if engine.paused else engine.pause()
+        ).props("color=white text-color=black")
+        _estop_button(engine, cal)
+
+        def tick() -> None:
+            if engine.paused:
+                state.text = "EMERGENCY STOP: PAUSED" if engine.estopped else "PAUSED"
+            else:
+                state.text = "RUNNING"
+            state.classes(
+                replace="text-lg font-bold px-2 rounded "
+                + ("bg-orange-600" if engine.paused else "bg-green-700")
+            )
+            toggle.text = "Resume" if engine.paused else "Pause"
+
+        tick()
+        ui.timer(REFRESH_S, tick)
 
 
 def _hall_boxes(cfg: Config, selected: list[str]) -> Callable[[], list[str]]:
@@ -124,20 +145,15 @@ def _estop_button(engine: Engine, cal: view.Calibrator) -> None:
             return
         ui.notify("Emergency stop: all released, PAUSED until Resume", type="warning")
 
-    ui.button("EMERGENCY STOP", on_click=stop, color="red").classes("text-2xl p-6 font-bold")
+    ui.button("EMERGENCY STOP", on_click=stop, color="red").classes("text-lg font-bold")
 
 
 def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
     @ui.page("/")
     def dashboard() -> None:
-        _header(rt)
+        _header(rt, engine, cal)
         clock = ui.label().classes("text-7xl font-mono")
-        _estop_button(engine, cal)
         with ui.row().classes("items-center gap-6"):
-            state = ui.label().classes("text-3xl font-bold")
-            toggle = ui.button(
-                on_click=lambda: engine.resume() if engine.paused else engine.pause()
-            )
             ctrl = ui.label().classes("text-lg")
             talk = ui.label("TALKING").classes("text-lg bg-red-600 text-white px-2 rounded")
             away = ui.label().classes("text-lg bg-orange-600 text-white px-2 rounded")
@@ -195,14 +211,6 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
         def tick() -> None:
             now = rt.clock.now()
             clock.text = f"{now:%a %H:%M:%S}"
-            state.text = "RUNNING"
-            if engine.paused:
-                state.text = "EMERGENCY STOP: PAUSED" if engine.estopped else "PAUSED"
-            state.classes(
-                replace="text-3xl font-bold "
-                + ("text-orange-600" if engine.paused else "text-green-700")
-            )
-            toggle.text = "Resume" if engine.paused else "Pause"
             ctrl.text = "controller connected" if rt.ctrl.connected else "CONTROLLER DISCONNECTED"
             talk.visible = engine.talking
             away.visible = bool(cal.away)
@@ -237,8 +245,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
 
     @ui.page("/manual")
     def manual() -> None:
-        _header(rt)
-        _estop_button(engine, cal)
+        _header(rt, engine, cal)
         cfg = engine.cfg
         ui.label("Halls").classes("text-xl font-bold")
         halls = _hall_boxes(cfg, cfg.announce.halls)
@@ -296,7 +303,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
 
     @ui.page("/calibration")
     def calibration() -> None:
-        _header(rt)
+        _header(rt, engine, cal)
         cfg = engine.cfg
         ui.label(
             "Calibration only: these move servos directly, outside the scheduler. "
@@ -379,7 +386,9 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
         with ui.card().classes("w-full max-w-3xl"):
             ui.label("Full sequence").classes("text-lg font-bold")
             chime = ui.number("chime seconds", value=ann.chime_seconds, step=0.1, min=0)
+            chime.classes("w-40").tooltip("chime seconds")
             tail = ui.number("tail seconds", value=ann.tail_seconds, step=0.1, min=0)
+            tail.classes("w-40").tooltip("tail seconds")
             ui.label("volume")
             volume = ui.slider(min=0, max=1, step=0.05, value=cfg.audio.volume).props(
                 "label-always"
@@ -433,7 +442,7 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
 
     @ui.page("/settings")
     def settings() -> None:
-        _header(rt)
+        _header(rt, engine, cal)
         cfg = engine.cfg
         ui.label("Messages").classes("text-xl font-bold")
         ui.label(
@@ -493,11 +502,13 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
             english = ui.switch("Speak English", value=t.english)
             english_voice = ui.select(
                 list(ENGLISH_VOICES), value=t.english_voice, label="English voice"
-            )
+            ).classes("w-48")
         with ui.row().classes("items-center gap-6"):
             speed = {"min": MIN_SPEED, "max": MAX_SPEED, "step": 0.05}
             japanese_speed = ui.number("Japanese speed", value=t.japanese_speed, **speed)
+            japanese_speed.classes("w-40").tooltip("Japanese speed")
             english_speed = ui.number("English speed", value=t.english_speed, **speed)
+            english_speed.classes("w-40").tooltip("English speed")
             pause = ui.number(
                 "Pause between Japanese and English (s)",
                 value=t.pause_seconds,
@@ -508,14 +519,17 @@ def _pages(rt: Runtime, engine: Engine, cal: view.Calibrator) -> None:
         ui.label("Halls to announce in").classes("text-xl font-bold")
         halls = _hall_boxes(cfg, cfg.announce.halls)
         poll = ui.number("poll interval (s)", value=cfg.schedule.poll_seconds, min=10, step=10)
+        poll.classes("w-40").tooltip("poll interval (s)")
         ui.label("Match minutes per round").classes("text-xl font-bold")
         rounds = {}
         with ui.row():
             for round_name, minutes in cfg.schedule.round_minutes.items():
                 rounds[round_name] = ui.number(round_name, value=minutes, min=1, step=1)
+                rounds[round_name].classes("w-40").tooltip(round_name)
             default_minutes = ui.number(
                 "other rounds", value=cfg.schedule.default_match_minutes, min=1, step=1
             )
+            default_minutes.classes("w-40").tooltip("other rounds")
         ui.label(f"Schedule source: {cfg.schedule.kind} (edit config.toml to change)")
 
         def edit(c: Config) -> None:
