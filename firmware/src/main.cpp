@@ -16,7 +16,9 @@
 // ---- configuration --------------------------------------------------------
 // Channel -> pin table. Change pins here only.
 static const uint8_t NUM_CH = 8;
-static const uint8_t PINS[NUM_CH] = {D3, D5, D6, D9, D10, D11, D12, D13};
+// Channel n is analog header pin An, driven as a digital output. On the Nucleo-144 F767ZI and
+// F746ZG: A0 PA3, A1 PC0, A2 PC3, A3 PF3, A4 PF5, A5 PF10 (Arduino header), A6 PB1, A7 PC2 (Zio).
+static const uint8_t PINS[NUM_CH] = {A0, A1, A2, A3, A4, A5, A6, A7};
 
 static const uint32_t BAUD = 115200;
 static const uint32_t IWDG_US = 500000;        // hardware watchdog timeout

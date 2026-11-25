@@ -20,14 +20,14 @@ Power goes one way: the 5 V 4 A adapter feeds a servo rail on perfboard, and the
          |         |         |         |
   GND ===+=========+=========+=========+======> Nucleo GND
 
-  Nucleo D3  ---- signal CH0 ---- extension lead ---- servo SC1
-  Nucleo D5  ---- signal CH1 ---- extension lead ---- servo SC2
-  Nucleo D6  ---- signal CH2 ---- extension lead ---- servo SC3
-  Nucleo D9  ---- signal CH3 ---- extension lead ---- servo SPREKEN
-  Nucleo D10 ---- signal CH4 (spare)
-  Nucleo D11 ---- signal CH5 (spare)
-  Nucleo D12 ---- signal CH6 (spare)
-  Nucleo D13 ---- signal CH7 (spare)
+  Nucleo A0  ---- signal CH0 ---- extension lead ---- servo SPREKEN
+  Nucleo A1  ---- signal CH1 ---- extension lead ---- servo SC1
+  Nucleo A2  ---- signal CH2 ---- extension lead ---- servo SC2
+  Nucleo A3  ---- signal CH3 ---- extension lead ---- servo SC3
+  Nucleo A4  ---- signal CH4 (spare)
+  Nucleo A5  ---- signal CH5 (spare)
+  Nucleo A6  ---- signal CH6 (spare)
+  Nucleo A7  ---- signal CH7 (spare)
 
   Laptop USB ---- Nucleo ST-Link USB (serial, /dev/ttyACM0)
 
@@ -56,16 +56,16 @@ From the pin table in `firmware/PROTOCOL.md`. The button mapping is the default 
 
 | Channel | Nucleo pin | Default button |
 |---|---|---|
-| 0 | D3 | SC1 |
-| 1 | D5 | SC2 |
-| 2 | D6 | SC3 |
-| 3 | D9 | SPREKEN |
-| 4 | D10 | spare |
-| 5 | D11 | spare |
-| 6 | D12 | spare |
-| 7 | D13 | spare |
+| 0 | A0 | SPREKEN |
+| 1 | A1 | SC1 |
+| 2 | A2 | SC2 |
+| 3 | A3 | SC3 |
+| 4 | A4 | spare |
+| 5 | A5 | spare |
+| 6 | A6 | spare |
+| 7 | A7 | spare |
 
-Run a jumper from each Nucleo pin to the signal pin of that channel's header. Tape or hot-glue the jumpers for transport. Label each lead with its channel number at both ends.
+Channel n is pin An. A0 to A5 are on the Arduino header, A6 and A7 on the Zio connector next to it. The firmware drives them as digital outputs. Run a jumper from each Nucleo pin to the signal pin of that channel's header. Tape or hot-glue the jumpers for transport. Label each lead with its channel number at both ends.
 
 ## Servo leads
 

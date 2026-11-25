@@ -5,22 +5,22 @@ watchdog_ms = 2000
 max_hold_s = 60
 
 [actuators.SC1]
-channel = 0
-rest = 90
-press = 60
-
-[actuators.SC2]
 channel = 1
 rest = 90
 press = 60
 
-[actuators.SC3]
+[actuators.SC2]
 channel = 2
 rest = 90
 press = 60
 
-[actuators.SPREKEN]
+[actuators.SC3]
 channel = 3
+rest = 90
+press = 60
+
+[actuators.SPREKEN]
+channel = 0
 rest = 90
 press = 60
 

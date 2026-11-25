@@ -76,16 +76,18 @@ sends `REST`, and `ANGLE` returns `ERR no rest` until then.
 
 | Channel | Pin |
 |---|---|
-| 0 | D3 |
-| 1 | D5 |
-| 2 | D6 |
-| 3 | D9 |
-| 4 | D10 |
-| 5 | D11 |
-| 6 | D12 |
-| 7 | D13 |
+| 0 | A0 (PA3) |
+| 1 | A1 (PC0) |
+| 2 | A2 (PC3) |
+| 3 | A3 (PF3) |
+| 4 | A4 (PF5) |
+| 5 | A5 (PF10) |
+| 6 | A6 (PB1) |
+| 7 | A7 (PC2) |
 
-The core's Servo library uses a software timer (TIM7), so it can drive any of these digital pins.
+Channel n is pin An. A0 to A5 are on the Arduino header, A6 and A7 on the Zio connector next to it (CN10).
+
+The core's Servo library uses a software timer (TIM7), so it can drive any of these pins: the analog pins work as digital outputs.
 
 ## Power notes
 

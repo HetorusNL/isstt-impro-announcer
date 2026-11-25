@@ -23,7 +23,7 @@ def test_example_config_loads():
     assert cfg.announce.halls == ["SC1", "SC2", "SC3"]
     assert cfg.messages["match_start"] == "Referees, you may start the matches."
     assert cfg.messages["match_end"] == "Referees, you may end the matches."
-    assert cfg.actuators["SPREKEN"].channel == 3
+    assert cfg.actuators["SPREKEN"].channel == 0
     assert cfg.messages["match_start_ja"] == "審判の皆さん、試合を開始してください。"
     assert cfg.messages["match_end_ja"] == "審判の皆さん、試合を終了してください。"
 
