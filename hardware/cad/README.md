@@ -18,6 +18,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 | `tensioner_collar.scad` | Stop collars under the push bolt head, set the squeeze. One plate: 2 each of 2.2, 2.4, 2.6 and 2.8 mm | 1 plate | Bambu Green |
 | `squeeze_gauge.scad` | Go/no-go feeler gauge for the post gap, one for both sides | 1 | Hot Pink |
 | `end_cap.scad` | Press-fit end cap: 2 rail ends, 2 post bottoms | 4 + spare | Black |
+| `cable_clip.scad` | Cable clip on the rail's top slot (M5x10 and a drop-in nut each), holds the servo leads along the rail. Print standing on its hoop end, as laid out | 1 per spare nut | Black |
 | `speaker_cradle.scad` | ER-151 cradle, arm and fixed half of the tube clamp | 1 | Black |
 | `speaker_clamp_cap.scad` | Removable half of the tube clamp | 1 | Black |
 | `speaker_snap_test.scad` | Cradle fit test: three cradle ends with different clearances. Print before the cradle | 1 plate | Black |
@@ -36,7 +37,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 
 | Colour | Parts |
 |---|---|
-| Black (10101) | 2 jaws, 2 tensioner blocks, 2 tensioner pads, end caps, speaker cradle and clamp cap, fit test plate |
+| Black (10101) | 2 jaws, 2 tensioner blocks, 2 tensioner pads, end caps, cable clips, speaker cradle and clamp cap, fit test plate |
 | Blue (10601) | 3 carriages and 3 brackets, for SC 1, SC 2 and SC 3 |
 | Pumpkin Orange (10301) | 1 carriage and 1 bracket, for SPREKEN |
 | Sunflower Yellow (10402) | 4 cams, 4 plungers and a spare: the moving parts |
@@ -52,7 +53,7 @@ Render a part with `openscad -o part.stl part.scad`. STLs are not committed. Eac
 
 ![The rig in its print colours, from the back](img/rig-colours-back.png)
 
-The grey translucent blocks are the keep-out volumes over the covered buttons, not parts. The model also draws the bought parts from `hardware.scad`: every bolt and drop-in nut (in tan, so they stand out), the corner brackets, the EVA pads and plunger dots, and the servo and horn screws. The tensioners are drawn clamped, with the push bolt seated on its collar. The corner bracket's width, bolt hole position, lips and window are estimates (`corner_*` in `params.scad`): they only change the pictures.
+The grey translucent blocks are the keep-out volumes over the covered buttons, not parts. The model also draws the two cable clips on the rail's top slot (where they go is up to you) and the bought parts from `hardware.scad`: every bolt and drop-in nut (in tan, so they stand out), the corner brackets, the EVA pads and plunger dots, and the servo and horn screws. The tensioners are drawn clamped, with the push bolt seated on its collar. The corner bracket's width, bolt hole position, lips and window are estimates (`corner_*` in `params.scad`): they only change the pictures.
 
 ## Print settings (Bambu Lab H2D)
 
@@ -97,7 +98,8 @@ Count of M5 nuts, with the default four modules:
 | Module carriages | Pocket for the height bolt | 4 |
 | Tensioner blocks | Pocket for the push bolt | 2 |
 | Speaker clamp | Pockets | 2 |
-| **Total** | | **18 of the 20 ordered** |
+| Rail | Top slot, for the cable clips | 2 |
+| **Total** | | **20 of the 20 ordered** |
 
 The corner brackets bring their own hardware, which is not in this count: M4x8 bolts and M4 drop-in nuts, 2 of each per bracket, so **8 M4 nuts on top of the 18 M5**. One nut of each bracket goes in the rail's bottom slot and the other in a post's side slot.
 
@@ -138,6 +140,11 @@ The side pads and tip dots stay in by the press fit. The under-lip pad hangs ups
 7. Module: trim a stock single horn to `horn_stub` (7.5 mm from the axis). Drop the plunger into the guide from above, with the dot in its tip, **before** the servo: once the servo is in, the plunger no longer fits past it. Fit the servo from the back with the ears on the back face and the servo's own screws. Fit the horn and the cam with an M2.5x10 screw, its head on the cam's front face. The stock screw is too short with a cam (tested 2026-11-17). A screw goes about 4.5 mm into the shaft before it bottoms, so the cam is 6.6 mm thick and its 4 mm floor leaves 4 mm of thread in the shaft. If the screw bottoms before the head clamps the cam, put an M2.5 washer under the head. The screw only holds the cam on: the arm in its pocket carries the turning force.
 8. Carriage on rail: M5x10 into a T-nut, key in the slot. Bracket on carriage: M5x10 through the slot into a T-nut in the pocket. The slot also gives a screwdriver access to the rail bolt, so a module can slide along the rail without taking it apart.
 9. Slide each module over its button. With the eccentric pointing up, which is the cam's clear position, adjust the height so that the plunger rests on the cap with about 1 mm gap to the cam. Do not set this at servo angle 90: see "Cam calibration".
+10. Cable clips, 2 of them, on the rail's top slot: one right of the SC modules and one above the right post, or wherever your leads come together. Drop a nut into the top slot, set the clip on with its key in the slot and its hoop along the rail, and drive an M5x10 down through the clip into the nut with the screwdriver from above. Then push the servo leads in from the top, past the two lips. Keep to the routing rule in `hardware/wiring.md`: no lead across or above the covered buttons.
+
+    ![Step 10: cable clip above the right post, pulled up: its bolt, and the nut for the top slot](img/assembly-clip.png)
+
+    ![Step 10: both clips with the four servo leads pushed in](img/assembly-leads.png)
 
 Module height adjustment is +6 mm and -3 mm: further down, the guide touches the cap.
 

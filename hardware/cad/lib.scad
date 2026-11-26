@@ -231,6 +231,37 @@ module end_cap() {
         box(ext / 2 - slot_depth + 0.2, ext / 2 - 0.2, -(slot_w - 0.25) / 2, (slot_w - 0.25) / 2, plate, plate + finger);
 }
 
+// ---- Cable clip, local axes: X along the rail, Y across, Z up, the rail's top face at
+// Z=0 and its slot on Y=0. Printed on its end, so the holes are teardrops pointing -X.
+module teardrop_hole(d, h) {
+    linear_extrude(h) hull() {
+        circle(d = d);
+        translate([-d / 2 * sqrt(2), 0]) circle(d = 0.01);
+    }
+}
+
+module cable_clip() {
+    w2 = clip_w / 2;
+    in2 = w2 - clip_wall;
+    top = clip_base_h + clip_ch_h;
+    difference() {
+        union() {
+            box(0, clip_len, -w2, w2, 0, clip_base_h);
+            // slot key, left out where the T-nut's raised centre sits
+            box(clip_bolt_x + key_relief, clip_len, -key_w / 2, key_w / 2, -key_d, 0);
+            // cable hoop: side walls with sloped snap lips, cables push in from the top
+            translate([clip_hoop_x, 0, 0]) rotate([90, 0, 90]) linear_extrude(clip_len - clip_hoop_x)
+                for (s = [-1, 1]) mirror([s < 0 ? 1 : 0, 0]) polygon([
+                    [in2, clip_base_h - 0.01], [w2, clip_base_h - 0.01], [w2, top + clip_lip_t],
+                    [clip_gap / 2, top - clip_lip_drop + clip_lip_t], [clip_gap / 2, top - clip_lip_drop],
+                    [in2, top]]);
+        }
+        // bolt into the T-nut, head recessed into the base and open at the top for the screwdriver
+        translate([clip_bolt_x, 0, -key_d - 1]) teardrop_hole(m5_clear, clip_base_h + key_d + 2);
+        translate([clip_bolt_x, 0, rail_under_head]) teardrop_hole(m5_head_d, m5_head_h + 1);
+    }
+}
+
 // ---- Speaker holder, local axes: mic head tip at the origin, tube along -Z,
 // prism long axis along X, the mesh at Z=mic_dist facing the mic.
 

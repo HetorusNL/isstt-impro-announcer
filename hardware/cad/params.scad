@@ -303,6 +303,19 @@ tb_leaf_t = round(5 * pow(btn_force * 4 * pow(tb_leaf_l, 3)
 tb_leaf_z = -rp_t - 6;  // leaf top under the stem at rest
 tb_sockets = [["SC1", -1], ["SC2", -1], ["SC3", -1], ["SPREKEN", 1]]; // button, leaf direction in Y
 
+// ---- Cable clip: bolts into the rail's top slot, holds the servo leads along the rail ----
+clip_len = 26;          // along the rail: bolt zone, then the cable hoop
+clip_bolt_x = 6.5;      // bolt centre from the clip's end
+clip_hoop_x = 13;       // hoop starts here, past the bolt head
+clip_w = 20;            // across the rail: the rail's width
+clip_wall = 2;          // hoop side walls
+clip_ch_h = 8;          // cable channel height above the base
+clip_lip_t = 1.0;       // snap lips: thin, so they flex as the cables go in
+clip_gap = 1.0;         // gap between the lip tips: cables are pushed past it
+clip_lip_drop = 2.5;    // the lips slope down into the channel by this much
+clip_base_h = rail_under_head + m5_head_h;  // base: material under the bolt head plus the head
+clip_centres = [136, post_x_r]; // along the desk, pictures only: right of the SC modules, and above the right post
+
 // ---- Speaker holder: Earson ER-151 -------------------------------------------
 // The ER-151 is an equilateral triangle with round corners: rubber end parts, and a narrower mesh
 // section between them. Shape from the Thingiverse bike holder (thing 2039735, its .scad), sizes

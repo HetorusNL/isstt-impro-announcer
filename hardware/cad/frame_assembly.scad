@@ -65,6 +65,11 @@ module frame() {
     // corner brackets, both sides of each post, with their bolts and nuts
     for (x = [post_x_l, post_x_r], s = [-1, 1])
         translate([x + s * ext / 2, rail_y, rail_z0]) mirror([s < 0 ? 1 : 0, 0, 0]) corner_joint();
+    // cable clips on the rail's top slot, with their bolts and nuts
+    for (x = clip_centres) translate([x - clip_len / 2, rail_y, rail_z1]) {
+        color(c_structure) cable_clip();
+        cable_clip_parts();
+    }
     // end caps: rail ends and post bottoms, tongues into the profile
     color(c_structure) {
         translate([rail_x0 - 2, rail_y, rail_zc]) rotate([0, 90, 0]) end_cap();

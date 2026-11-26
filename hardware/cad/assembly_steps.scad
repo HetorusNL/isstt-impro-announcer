@@ -6,7 +6,7 @@ include <params.scad>
 include <lib.scad>
 include <hardware.scad>
 
-view = "frame";   // frame, corner, cap, jaw, tensioner, done
+view = "frame";   // frame, corner, cap, jaw, tensioner, done, clip, leads
 
 c_alu = "Silver";
 c_black = "#202020";
@@ -97,6 +97,24 @@ module tensioner_right() translate([post_x_r + ext / 2, rail_y, 0]) {
     color(c_collar) translate([ten_head_x, 0, ten_z]) rotate([0, 90, 0]) tensioner_collar();
 }
 
+// cable clip on the rail's top slot, centred at x; e explodes it upwards
+module clip_at(x, e = 0) {
+    translate([x - clip_len / 2, rail_y, rail_z1]) {
+        color(c_black) translate([0, 0, e]) cable_clip();
+        translate([clip_bolt_x, 0, rail_under_head + 2.2 * e]) rotate([180, 0, 0]) m5_bolt();
+        translate([clip_bolt_x, 0, e > 0 ? 0.4 * e : -slot_lip]) rotate([180, 0, 0]) m5_nut();
+    }
+}
+
+// the four servo leads (extension lead colours), flat side by side on the clips' floor
+module leads(x0, x1) {
+    for (i = [0 : 3], w = [0 : 2]) {
+        y = rail_y + (i - 1.5) * 3.8 + (w - 1) * 1.2;
+        color(["#202020", "#C02020", "#F0F0F0"][w])
+            translate([x0, y, rail_z1 + clip_base_h + 0.6]) rotate([0, 90, 0]) cylinder(d = 1.2, h = x1 - x0, $fn = 12);
+    }
+}
+
 // ---- views ----------------------------------------------------------------------
 if (view == "frame") {           // step 2, whole frame
     rail();
@@ -122,6 +140,24 @@ if (view == "frame") {           // step 2, whole frame
     end_caps();
     jaw_left();
     tensioner_left(12);
+} else if (view == "clip") {     // step 10, cable clip above the right post, pulled up
+    rail();
+    post(post_x_r);
+    corner(post_x_r);
+    end_caps();
+    jaw_right();
+    tensioner_right();
+    clip_at(post_x_r, 12);
+} else if (view == "leads") {    // step 10, both clips with the leads pushed in
+    rail();
+    for (x = [post_x_l, post_x_r]) { post(x); corner(x); }
+    end_caps();
+    jaw_left();
+    jaw_right();
+    tensioner_left();
+    tensioner_right();
+    for (x = clip_centres) clip_at(x);
+    leads(clip_centres[0] - 25, rail_x0 + rail_len);
 } else if (view == "done") {     // frame complete, ready for the squeeze
     rail();
     for (x = [post_x_l, post_x_r]) { post(x); corner(x); }

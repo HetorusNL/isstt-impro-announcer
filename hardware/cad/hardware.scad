@@ -126,5 +126,11 @@ module servo_module_parts() {
     translate([0, cam_back_y + cam_t, z_shaft]) rotate([90, 0, 0]) m2_5_screw();
 }
 
+// cable clip's bolt and nut in the rail's top slot, cable_clip() axes
+module cable_clip_parts() {
+    translate([clip_bolt_x, 0, rail_under_head]) rotate([180, 0, 0]) m5_bolt();
+    translate([clip_bolt_x, 0, -slot_lip]) rotate([180, 0, 0]) m5_nut();
+}
+
 // EVA dot in the plunger tip, servo_plunger() axes
 module plunger_dot() color(c_eva) box(-2.25, 2.25, -2.25, 2.25, 0, pad_t);
